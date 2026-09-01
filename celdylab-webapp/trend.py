@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+import os
+
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
 
 import db
 from analysis import TREND_PLATFORMS, TREND_CATEGORIES
@@ -8,6 +10,9 @@ trend_bp = Blueprint("trend", __name__, url_prefix="/trend")
 
 @trend_bp.before_request
 def _require_login():
+    # /trend/api/* 는 브라우저 로그인 세션이 아니라 자체 API 키로 인증해요 (Cowork 등 서버-투-서버 호출용)
+    if request.path.startswith("/trend/api/"):
+        return
     if not session.get("user_id"):
         return redirect(url_for("login", next=request.path))
 
@@ -89,6 +94,7 @@ def index():
         "trend.html",
         platforms=TREND_PLATFORMS, categories=TREND_CATEGORIES,
         records=records, popular_sellers=popular_sellers, category_insights=category_insights,
+        api_key_configured=bool(os.environ.get("AUTOMATION_API_KEY")),
     )
 
 
@@ -124,3 +130,74 @@ def clear():
     db.clear_trend_records()
     flash("전체 초기화했어요.")
     return redirect(url_for("trend.index"))
+
+
+# ---------------------------------------------------------------------------
+# 외부 자동화(Cowork 예약작업 등)가 호출하는 API
+#
+# 사용 예 (Cowork가 WebSearch/WebFetch로 외부몰을 확인한 뒤 그 결과를 이 웹앱에 저장할 때):
+#
+#   POST https://<railway-domain>/trend/api/records
+#   Headers: Authorization: Bearer <AUTOMATION_API_KEY>
+#            Content-Type: application/json
+#   Body:
+#   {
+#     "records": [
+#       {"check_date": "2026-09-01", "platform": "82market", "seller": "하봄",
+#        "product": "레벤호프 내열유리용기", "category": "주방용품", "price": 12900,
+#        "link": "https://www.82market.com/..."},
+#       ...
+#     ]
+#   }
+#
+# 응답: {"ok": true, "inserted": N} 또는 {"ok": false, "error": "..."}
+#
+# AUTOMATION_API_KEY 환경변수를 Railway에 등록해야 이 엔드포인트가 켜져요.
+# (등록 안 돼 있으면 보안을 위해 항상 403을 돌려줘요 — 아무나 호출 못 하게)
+# ---------------------------------------------------------------------------
+
+def _check_api_key():
+    expected = os.environ.get("AUTOMATION_API_KEY")
+    if not expected:
+        return False
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else request.headers.get("X-API-Key", "")
+    return token == expected
+
+
+@trend_bp.route("/api/records", methods=["POST"])
+def api_create_records():
+    if not _check_api_key():
+        return jsonify({"ok": False, "error": "인증 실패 (AUTOMATION_API_KEY 미설정 또는 키 불일치)"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    records = payload.get("records")
+    if not isinstance(records, list) or not records:
+        return jsonify({"ok": False, "error": "records 배열이 비어있거나 형식이 올바르지 않아요."}), 400
+
+    inserted = 0
+    errors = []
+    for i, r in enumerate(records):
+        seller = str(r.get("seller", "")).strip()
+        if not seller:
+            errors.append(f"{i}번째 항목: seller가 비어있어 건너뜀")
+            continue
+        data = {
+            "check_date": str(r.get("check_date", "")).strip(),
+            "platform": str(r.get("platform", "")).strip(),
+            "seller": seller,
+            "product": str(r.get("product", "")).strip(),
+            "category": str(r.get("category", "")).strip(),
+            "price": int(r.get("price") or 0),
+            "link": str(r.get("link", "")).strip(),
+        }
+        db.create_trend_record(data, "automation")
+        inserted += 1
+
+    return jsonify({"ok": True, "inserted": inserted, "skipped": errors})
+
+
+@trend_bp.route("/api/records", methods=["GET"])
+def api_status():
+    """등록 여부만 가볍게 확인할 수 있는 헬스체크 (인증 불필요, 민감정보 없음)."""
+    return jsonify({"api_enabled": bool(os.environ.get("AUTOMATION_API_KEY"))})

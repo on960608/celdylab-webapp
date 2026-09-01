@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}직원 계정 관리 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">SETTINGS · TEAM ACCOUNTS</div>
+  <h2>직원 계정 관리</h2>
+  <p>팀원이 로그인해서 쓸 수 있도록 여기서 계정을 만들어 주세요. 계정을 받은 팀원에게 사이트 주소와 아이디·비밀번호를 알려주면 바로 로그인할 수 있어요.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>새 계정 추가</h3></div></div>
+  <form method="post" action="{{ url_for('employees_add') }}" class="ins-form-grid">
+    <label>아이디 (로그인용, 영문 권장)<input name="username" placeholder="예: hh, minji123"></label>
+    <label>이름 (화면에 표시될 이름)<input name="name" placeholder="예: 희현"></label>
+    <label>비밀번호<input name="password" type="password" placeholder="4자 이상"></label>
+    <label>비밀번호 확인<input name="password_confirm" type="password"></label>
+    <div class="ins-wide" style="display:flex;justify-content:flex-end">
+      <button class="refresh-btn" type="submit">계정 만들기</button>
+    </div>
+  </form>
+</div>
+
+<div class="chart-card">
+  <div class="chart-card-head"><div><h3>계정 목록</h3></div></div>
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>아이디</th><th>이름</th><th>생성일</th><th></th></tr></thead>
+      <tbody>
+        {% for e in employees %}
+        <tr>
+          <td>{{ e.username }}</td>
+          <td>{{ e.name }}{% if e.id == session.get('user_id') %} <span class="ins-badge contact">나</span>{% endif %}</td>
+          <td>{{ e.created_at[:10] }}</td>
+          <td><form method="post" action="{{ url_for('employees_delete', emp_id=e.id) }}" onsubmit="return confirm('{{ e.name }}({{ e.username }}) 계정을 삭제할까요?')"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">계정이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="note">계정을 삭제하면 그 계정으로는 더 이상 로그인할 수 없어요. 본인 계정과 마지막 남은 계정은 삭제할 수 없게 막아뒀어요.</p>
+</div>
+{% endblock %}

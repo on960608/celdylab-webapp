@@ -3,7 +3,7 @@ import functools
 from urllib.parse import quote
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 import db
 
@@ -103,6 +103,52 @@ def archive_update():
     db.upsert_archive_link(brand, product, url, session.get("user_name"))
     flash(f"{brand}{(' · ' + product) if product else ''} 링크를 저장했어요.")
     return redirect(url_for("archive"))
+
+
+# ---------------------------------------------------------------------------
+# 직원 계정 관리 — 팀원이 직접 로그인 계정을 만들 수 있게 (CLI 없이 화면에서)
+# ---------------------------------------------------------------------------
+
+@app.route("/employees")
+@login_required
+def employees():
+    return render_template("employees.html", employees=db.list_employees())
+
+
+@app.route("/employees/add", methods=["POST"])
+@login_required
+def employees_add():
+    username = request.form.get("username", "").strip()
+    name = request.form.get("name", "").strip()
+    pw1 = request.form.get("password", "")
+    pw2 = request.form.get("password_confirm", "")
+
+    if not username or not name:
+        flash("아이디와 이름을 모두 입력해 주세요.")
+    elif db.get_employee_by_username(username):
+        flash(f"이미 '{username}' 아이디가 있어요.")
+    elif pw1 != pw2:
+        flash("비밀번호가 서로 달라요.")
+    elif len(pw1) < 4:
+        flash("비밀번호는 4자 이상으로 입력해 주세요.")
+    else:
+        db.create_employee(username, generate_password_hash(pw1), name)
+        flash(f"'{name}'({username}) 계정을 만들었어요.")
+    return redirect(url_for("employees"))
+
+
+@app.route("/employees/<int:emp_id>/delete", methods=["POST"])
+@login_required
+def employees_delete(emp_id):
+    if emp_id == session.get("user_id"):
+        flash("지금 로그인 중인 본인 계정은 삭제할 수 없어요. 다른 계정으로 로그인해서 삭제해 주세요.")
+        return redirect(url_for("employees"))
+    if len(db.list_employees()) <= 1:
+        flash("마지막 남은 계정은 삭제할 수 없어요 (로그인할 방법이 없어져요).")
+        return redirect(url_for("employees"))
+    db.delete_employee(emp_id)
+    flash("계정을 삭제했어요.")
+    return redirect(url_for("employees"))
 
 
 # ---------------------------------------------------------------------------

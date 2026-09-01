@@ -39,6 +39,11 @@
       <a class="nav-link {{ 'active' if request.endpoint == 'giveaway.index' else '' }}" href="{{ url_for('giveaway.index') }}">댓글 이벤트 추첨</a>
     </nav>
 
+    <div class="nav-label">설정</div>
+    <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint == 'employees' else '' }}" href="{{ url_for('employees') }}">직원 계정 관리</a>
+    </nav>
+
     <div class="sidebar-foot">
       {% if current_user_name %}
         <span>{{ current_user_name }}님</span>

@@ -64,6 +64,13 @@ def list_employees():
     return rows
 
 
+def delete_employee(emp_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM employees WHERE id = ?", (emp_id,))
+    conn.commit()
+    conn.close()
+
+
 # ---------- archive links ----------
 
 def list_archive_links():
