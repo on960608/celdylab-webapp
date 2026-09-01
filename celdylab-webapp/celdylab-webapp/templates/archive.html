@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}자료실 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">GONGGU · ARCHIVE</div>
+  <h2>자료실</h2>
+  <p>브랜드·제품별 구글 드라이브 폴더로 바로 이동합니다. 로그인한 직원이라면 누구나 링크를 수정할 수 있고, 저장하는 즉시 데이터베이스에 반영되어 팀 전체 화면에 자동으로 보여요.</p>
+</div>
+
+<div class="archive-lock-banner">
+  <span>🟢 실시간 DB 연동 중 — 링크를 수정하면 새로고침하는 모든 팀원에게 바로 보여요.</span>
+</div>
+
+{% for b in brands %}
+  <div class="chart-card" style="margin-bottom:16px">
+    <div class="chart-card-head">
+      <div>
+        <h3>{{ b.name }}</h3>
+        <div class="unit">제품 {{ b.products|length }}개 · 구글 드라이브 바로가기</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <a class="refresh-btn" href="{{ b.url }}" target="_blank" rel="noopener">📁 {{ b.name }} 폴더 전체 열기{{ '' if b.has_link else ' (검색으로 찾기)' }}</a>
+        <details class="folder-edit">
+          <summary class="folder-edit-btn">✎ 링크 수정</summary>
+          <form class="folder-edit-form" method="post" action="{{ url_for('archive_update') }}">
+            <input type="hidden" name="brand" value="{{ b.name }}">
+            <input type="hidden" name="product" value="">
+            <input type="url" name="url" placeholder="https://drive.google.com/drive/folders/..." value="{{ b.url if b.has_link else '' }}">
+            <button class="refresh-btn" type="submit">저장</button>
+          </form>
+        </details>
+      </div>
+    </div>
+
+    <div class="platform-grid">
+      {% for p in b.products %}
+        <div class="folder-card">
+          <a class="folder-card-link" href="{{ p.url }}" target="_blank" rel="noopener">
+            <b>{{ p.name }}</b>
+            <span>{{ '폴더 바로가기 →' if p.has_link else '구글 드라이브에서 찾기 →' }}</span>
+          </a>
+          <details class="folder-edit">
+            <summary class="folder-edit-btn">✎ 링크 수정</summary>
+            <form class="folder-edit-form" method="post" action="{{ url_for('archive_update') }}">
+              <input type="hidden" name="brand" value="{{ b.name }}">
+              <input type="hidden" name="product" value="{{ p.name }}">
+              <input type="url" name="url" placeholder="https://drive.google.com/drive/folders/..." value="{{ p.url if p.has_link else '' }}">
+              <button class="refresh-btn" type="submit">저장</button>
+            </form>
+          </details>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endfor %}
+
+<p class="note">링크가 비어 있는 항목은 임시로 구글 드라이브 검색 링크를 보여드려요. "✎ 링크 수정"에서 실제 폴더 링크를 저장해두면 그 다음부터는 모두에게 바로 그 링크로 보여요.</p>
+{% endblock %}
