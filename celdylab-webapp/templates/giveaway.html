@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}댓글 이벤트 추첨 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">GIVEAWAY · COMMENT DRAW</div>
+  <h2>댓글 이벤트 추첨</h2>
+  <p>인스타그램 게시물의 댓글 작성자를 대상으로 조건에 맞는 후보를 추려 무작위로 당첨자를 뽑아요. 동일 계정 중복 댓글은 1명으로 처리돼요.</p>
+</div>
+
+{% if api_configured %}
+  <div class="chart-card" style="margin-bottom:16px;background:rgba(31,157,99,.08);border-color:rgba(31,157,99,.3)">
+    <p class="note" style="margin:0;color:var(--up)">✓ 인스타그램 자동 불러오기 연동이 설정되어 있어요. 셀디랩 계정에 연동된 게시물이면 "자동 불러오기"로 댓글을 바로 가져올 수 있어요.</p>
+  </div>
+{% else %}
+  <div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+    <p class="note" style="margin:0">⚠ 인스타그램 자동 불러오기가 아직 설정되어 있지 않아요. <code>INSTAGRAM_ACCESS_TOKEN</code>, <code>INSTAGRAM_BUSINESS_ID</code> 환경변수를 등록하면 셀디랩이 직접 운영하는 계정의 게시물에 한해 자동으로 댓글을 불러올 수 있어요 (타사 계정 게시물은 이 방식으로는 불가능해요). 지금은 아래에서 댓글을 직접 붙여넣어 사용해 주세요.</p>
+  </div>
+{% endif %}
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>추첨 설정</h3></div></div>
+  <form method="post" action="{{ url_for('giveaway.draw') }}" id="giveawayForm" class="ins-form-grid" enctype="multipart/form-data">
+    <label class="ins-wide">1. 인스타그램 게시물/릴스 링크
+      <div style="display:flex;gap:8px">
+        <input name="post_url" id="postUrl" placeholder="https://www.instagram.com/p/..." style="flex:1">
+        <button type="button" class="refresh-btn" id="fetchBtn">자동 불러오기</button>
+      </div>
+      <small id="fetchStatus" style="display:block;margin-top:4px;color:var(--muted2)"></small>
+    </label>
+
+    <label class="ins-wide">2. 이벤트 유형
+      <div style="display:flex;gap:16px;margin-top:6px">
+        <label style="flex-direction:row;align-items:center;gap:6px;display:flex;font-weight:700">
+          <input type="radio" name="event_type" value="keyword" id="typeKeyword" style="width:16px;height:16px"> 구매인증/키워드 이벤트
+        </label>
+        <label style="flex-direction:row;align-items:center;gap:6px;display:flex;font-weight:700">
+          <input type="radio" name="event_type" value="general" id="typeGeneral" style="width:16px;height:16px" checked> 일반 댓글 이벤트
+        </label>
+      </div>
+    </label>
+    <label class="ins-wide" id="keywordWrap" style="display:none">필수 단어 (댓글에 이 단어가 포함된 계정만 후보에 포함)
+      <input name="keyword" id="keywordInput" placeholder="예: 구매완료, 인증완료">
+    </label>
+
+    <label>3. 당첨 인원<input name="winner_count" type="number" min="1" placeholder="예: 5"></label>
+    <label>제외 계정 (본인/브랜드 등, 쉼표 또는 줄바꿈 구분)<textarea name="excluded_accounts" rows="1" placeholder="celdylab_official, my_brand_page"></textarea></label>
+
+    <label class="ins-wide">댓글 데이터 — 인원이 많으면 엑셀/CSV 업로드를 추천해요 (열 이름: 아이디, 댓글)
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--accent-soft);margin:6px 0 0">
+        <span style="font-size:12.5px;font-weight:800;color:var(--accent-deep)">댓글 CSV가 아직 없다면 ↓</span>
+        <a href="https://commentgrid.com/tool/instagram-comment-to-csv-exporter" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none;font-size:12px;padding:7px 12px">CommentGrid에서 뽑기 ↗</a>
+        <a href="https://commentpicker.com/export-comments-instagram.php" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none;font-size:12px;padding:7px 12px;background:transparent">Comment Picker에서 뽑기 ↗</a>
+        <span style="font-size:11px;color:var(--muted2);width:100%">게시물 링크를 붙여넣고 CSV로 내려받은 뒤, 아래 업로드칸에 그대로 올려주세요. (셀디랩이 만든 도구가 아니라 외부 서비스예요 — 이용 전 각 사이트의 개인정보 처리방침을 확인해 주세요)</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;padding:14px;border:1.5px dashed var(--line2);border-radius:12px;background:var(--panel-soft);margin:10px 0 0">
+        <div style="flex:1">
+          <b style="display:block;font-size:13px">엑셀(.xlsx) 또는 CSV 파일 업로드</b>
+          <small style="color:var(--muted2)">1,000명이 넘는 대량 댓글은 이 방식을 권장해요. 첫 줄은 "아이디", "댓글" 같은 열 제목으로 만들어 주세요.</small>
+        </div>
+        <input type="file" name="comments_file" id="commentsFile" accept=".csv,.xlsx">
+      </div>
+      <small style="color:var(--muted2)">— 또는 아래에 "아이디: 댓글내용" 형식으로 한 줄씩 직접 붙여넣기 (파일을 올리면 이 텍스트는 무시돼요) —</small>
+      <textarea name="comments_raw" id="commentsRaw" rows="8" placeholder="minji_life: 구매완료했어요!&#10;seller_2024: 예쁘네요&#10;minji_life: 인증 사진 올렸습니다"></textarea>
+    </label>
+
+    <label>관련 브랜드 (선택 — 시딩/공구 진행 건과 연결용)
+      <select name="related_brand"><option value="">선택 안 함</option>{% for b in brands %}<option>{{ b }}</option>{% endfor %}</select>
+    </label>
+    <label>메모 (선택)<input name="related_note" placeholder="예: 8월 세정서버 공구 이벤트"></label>
+    <input type="hidden" name="source" id="sourceInput" value="manual">
+
+    <div class="ins-wide" style="display:flex;justify-content:flex-end">
+      <button class="refresh-btn" type="submit" style="font-size:14px;padding:11px 22px">당첨자 추첨</button>
+    </div>
+  </form>
+</div>
+
+{% if result %}
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>추첨 결과</h3><div class="unit">{{ result.created_at[:16].replace('T',' ') }} 추첨 · {{ '구매인증/키워드 이벤트 (필수 단어: ' + result.keyword + ')' if result.event_type=='keyword' else '일반 댓글 이벤트' }}</div></div></div>
+
+  <div class="stat-row" style="margin-bottom:14px">
+    <div class="stat-tile"><span class="label">전체 댓글 수</span><strong>{{ result.total_comments }}개</strong></div>
+    <div class="stat-tile"><span class="label">조건 충족 계정 수</span><strong>{{ result.matched_accounts }}명</strong></div>
+    <div class="stat-tile"><span class="label">최종 추첨 대상 수</span><strong>{{ result.final_pool_count }}명</strong></div>
+  </div>
+
+  {% if result.stats.shortage %}
+    <p class="note" style="color:var(--down)">⚠ 조건에 맞는 참여자({{ result.final_pool_count }}명)가 요청한 당첨 인원({{ result.winner_count }}명)보다 적어서, 조건에 맞는 전원이 당첨 처리됐어요.</p>
+  {% endif %}
+
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>순번</th><th>Instagram 아이디</th><th>작성 댓글</th><th>필수 단어 포함</th></tr></thead>
+      <tbody>
+        {% for w in result.winners %}
+        <tr>
+          <td>{{ w.rank }}</td><td>@{{ w.username }}</td><td>{{ w.comment_text or '-' }}</td>
+          <td>{% if w.keyword_matched == 1 %}✅ 포함{% elif w.keyword_matched == 0 %}❌ 미포함{% else %}-{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">당첨자가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+    <button class="refresh-btn" type="button" id="copyBtn" data-usernames="{{ result.winners|map(attribute='username')|join(', ') }}">결과 복사</button>
+    <span id="copyStatus" class="note" style="margin:0"></span>
+  </div>
+</div>
+{% endif %}
+
+<div class="chart-card">
+  <div class="chart-card-head"><div><h3>추첨 기록</h3><div class="unit">지난 추첨 결과가 자동으로 기록돼요.</div></div></div>
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>일시</th><th>게시물</th><th>유형</th><th>당첨 인원</th><th>최종 대상</th><th>관련 브랜드</th><th></th></tr></thead>
+      <tbody>
+        {% for e in events %}
+        <tr>
+          <td>{{ e.created_at[:16].replace('T',' ') }}</td>
+          <td>{% if e.post_url %}<a href="{{ e.post_url }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+          <td>{{ '키워드(' + e.keyword + ')' if e.event_type=='keyword' else '일반' }}</td>
+          <td>{{ e.winner_count }}명</td>
+          <td>{{ e.final_pool_count }}명</td>
+          <td>{{ e.related_brand or '-' }}</td>
+          <td><form method="post" action="{{ url_for('giveaway.delete', event_id=e.id) }}" onsubmit="return confirm('이 기록을 삭제할까요?')"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align:center;color:var(--muted2);padding:20px 0">추첨 기록이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var kwRadio = document.getElementById("typeKeyword");
+  var genRadio = document.getElementById("typeGeneral");
+  var kwWrap = document.getElementById("keywordWrap");
+  function syncKeywordVisibility() {
+    kwWrap.style.display = kwRadio.checked ? "flex" : "none";
+  }
+  kwRadio.addEventListener("change", syncKeywordVisibility);
+  genRadio.addEventListener("change", syncKeywordVisibility);
+  syncKeywordVisibility();
+
+  var fetchBtn = document.getElementById("fetchBtn");
+  var fetchStatus = document.getElementById("fetchStatus");
+  var sourceInput = document.getElementById("sourceInput");
+  fetchBtn.addEventListener("click", function () {
+    var postUrl = document.getElementById("postUrl").value.trim();
+    if (!postUrl) { fetchStatus.textContent = "게시물 링크를 먼저 입력해 주세요."; fetchStatus.style.color = "var(--down)"; return; }
+    fetchStatus.textContent = "불러오는 중...";
+    fetchStatus.style.color = "";
+    fetch("{{ url_for('giveaway.api_fetch_comments') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ post_url: postUrl })
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.ok) {
+        fetchStatus.textContent = data.error || "댓글을 불러오지 못했어요.";
+        fetchStatus.style.color = "var(--down)";
+        return;
+      }
+      document.getElementById("commentsRaw").value = data.raw_text;
+      sourceInput.value = "api";
+      fetchStatus.textContent = "✓ 댓글 " + data.count + "개를 불러왔어요.";
+      fetchStatus.style.color = "var(--up)";
+    }).catch(function () {
+      fetchStatus.textContent = "요청 중 오류가 발생했어요.";
+      fetchStatus.style.color = "var(--down)";
+    });
+  });
+
+  var copyBtn = document.getElementById("copyBtn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", function () {
+      var text = copyBtn.getAttribute("data-usernames") || "";
+      var statusEl = document.getElementById("copyStatus");
+      navigator.clipboard.writeText(text).then(function () {
+        statusEl.textContent = "✓ 복사했어요.";
+        setTimeout(function () { statusEl.textContent = ""; }, 2000);
+      }).catch(function () {
+        statusEl.textContent = "복사에 실패했어요. 직접 선택해서 복사해 주세요.";
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

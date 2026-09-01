@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}협찬 인원 리스트업 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">SEEDING · SPONSORSHIP LIST</div>
+  <h2>협찬 인원 리스트업</h2>
+  <p>반응점수(1,000점 기준)와 STEP 02의 5가지 탈락 기준을 함께 적용해요. 숫자·날짜로 판단 가능한 기준은 자동으로 체크하고, 댓글 내용·협찬 콘텐츠처럼 직접 확인해야 하는 기준은 체크박스로 남겨주세요.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head" style="align-items:center">
+    <div><h3>리스트업 후보 등록</h3></div>
+    <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 후보 추가</summary>
+      <form method="post" action="{{ url_for('listup.add') }}" class="ins-form-grid" style="margin-top:12px">
+        <label>이름·계정<input name="name" placeholder="예: 김민지 (@minji_life)"></label>
+        <label class="ins-wide">인스타그램/게시물 링크<input name="link" placeholder="https://instagram.com/..."></label>
+        <label>팔로워 수<input name="followers" type="number" min="0"></label>
+        <label>최근 릴스 조회수 1<input name="views1" type="number" min="0"></label>
+        <label>최근 릴스 조회수 2<input name="views2" type="number" min="0"></label>
+        <label>최근 릴스 조회수 3<input name="views3" type="number" min="0"></label>
+        <label>평균 좋아요 수<input name="likes" type="number" min="0"></label>
+        <label>평균 댓글 수<input name="comments" type="number" min="0"></label>
+        <label>평균 공유 수<input name="shares" type="number" min="0"></label>
+        <label>최근 게시물·릴스 업로드일<input name="last_upload" type="date"></label>
+        <label style="display:flex;flex-direction:row;align-items:center;gap:8px;padding-top:22px">
+          <input name="has_real_comments" type="checkbox" style="width:16px;height:16px">
+          <span style="font-size:12.5px;font-weight:700;color:var(--muted)">실제 관심 댓글이 있음</span>
+        </label>
+        <label style="display:flex;flex-direction:row;align-items:center;gap:8px;padding-top:22px">
+          <input name="sponsored_low" type="checkbox" style="width:16px;height:16px">
+          <span style="font-size:12.5px;font-weight:700;color:var(--muted)">이전 협찬 콘텐츠만 반응이 눈에 띄게 낮음</span>
+        </label>
+        <label class="ins-wide">제안 사유(예외 진행 시)<textarea name="reason" rows="2"></textarea></label>
+        <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">등록</button></div>
+      </form>
+    </details>
+  </div>
+
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>이름·계정</th><th>링크</th><th>팔로워</th><th>반응점수</th><th>판정</th><th>탈락 사유</th><th>컨택</th><th></th></tr></thead>
+      <tbody>
+        {% for c in candidates %}
+        <tr>
+          <td>{{ c.name }}</td>
+          <td>{% if c.link %}<a href="{{ c.link }}" target="_blank" rel="noopener">열기 ↗</a>{% else %}-{% endif %}</td>
+          <td>{{ '{:,}'.format(c.followers) }}</td>
+          <td>{{ '{:,}'.format(c.score) }}</td>
+          <td>
+            {% if c.verdict.exception %}<span class="ins-badge pass">⭕ 예외 진행</span>
+            {% elif c.verdict.pass %}<span class="ins-badge pass">⭕ 선정</span>
+            {% else %}<span class="ins-badge fail">⛔ 탈락</span>{% endif %}
+          </td>
+          <td style="font-size:11.5px;color:var(--muted)">{{ c.verdict.reasons|join('<br>')|safe if c.verdict.reasons else '-' }}</td>
+          <td>{% if c.contacted %}<span class="ins-badge contact">컨택완료</span>{% else %}-{% endif %}</td>
+          <td><form method="post" action="{{ url_for('listup.delete', candidate_id=c.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 후보가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="note">반응점수는 (평균 조회수 ÷ 10) + (평균 댓글 수 × 2) + (평균 공유 수 × 4)로 계산해요. 1,000점 미만이거나 5가지 기준 중 하나라도 걸리면 ⛔ 탈락으로 표시돼요 (제안 사유를 입력하면 "예외 진행"으로 표시).</p>
+</div>
+
+<div class="stat-row" style="margin-bottom:16px">
+  <div class="stat-tile"><span class="label">등록 후보</span><strong>{{ total }}명</strong></div>
+  <div class="stat-tile"><span class="label">선정(⭕)</span><strong>{{ passed }}명</strong></div>
+  <div class="stat-tile"><span class="label">탈락(⛔)</span><strong>{{ failed }}명</strong></div>
+  <div class="stat-tile"><span class="label">컨택 완료</span><strong>{{ contacted_count }}명</strong></div>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head" style="align-items:center">
+    <div><h3>컨택(디엠) 명단 관리</h3></div>
+    <form method="get">
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:800;color:var(--muted)">브랜드
+        <select name="brand" onchange="this.form.submit()">
+          {% for b in brands %}<option value="{{ b }}" {{ 'selected' if contact_brand==b }}>{{ b }}</option>{% endfor %}
+        </select>
+      </label>
+    </form>
+  </div>
+  <form method="post" action="{{ url_for('listup.add_contact') }}" style="display:flex;gap:8px;margin:10px 0">
+    <input type="hidden" name="brand" value="{{ contact_brand }}">
+    <input name="name" placeholder="이름 입력 후 추가" style="flex:1">
+    <button class="refresh-btn" type="submit">추가</button>
+  </form>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    {% for c in contacted_list %}
+      <span class="ins-tag">{{ c.name }}
+        <form method="post" action="{{ url_for('listup.delete_contact', contact_id=c.id) }}" style="display:inline">
+          <input type="hidden" name="brand" value="{{ contact_brand }}">
+          <button type="submit">×</button>
+        </form>
+      </span>
+    {% else %}
+      아직 등록된 명단이 없습니다.
+    {% endfor %}
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="chart-card-head"><div><h3>효율 좋은 추천 후보 (최대 30명)</h3><div class="unit">컨택 완료 인원을 제외하고, "공구 성과 분석"에 이 브랜드로 등록된 셀러 중 효율(팔로워 1,000명당 매출) 순으로 추천해요.</div></div></div>
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>이름</th><th>팔로워</th><th>링크</th><th>공구 효율(1천명당 매출)</th><th>반품율</th></tr></thead>
+      <tbody>
+        {% for r in recommendations %}
+        <tr>
+          <td>{{ r.name }}</td><td>{{ '{:,}'.format(r.followers) }}</td>
+          <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기 ↗</a>{% else %}-{% endif %}</td>
+          <td>{{ '{:,}'.format(r.avg_per1k|round|int) }}원</td><td>{{ '%.1f'|format(r.avg_return) }}%</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align:center;color:var(--muted2);padding:20px 0">
+          {% if has_gongu_data %}{{ contact_brand }} 브랜드로 등록된 셀러가 모두 컨택 명단에 포함되어 있어요.
+          {% else %}공구 성과 분석에 {{ contact_brand }} 브랜드 셀러 데이터가 등록되면 추천 후보를 보여드려요.{% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if remaining > 0 %}<p class="note">그 외 {{ remaining }}명 더 있어요.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

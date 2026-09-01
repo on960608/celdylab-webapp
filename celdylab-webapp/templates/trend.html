@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}외부몰 트렌드 분석 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">ANALYSIS · EXTERNAL MALL TREND</div>
+  <h2>외부몰 트렌드 분석</h2>
+  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아)에서 확인한 인기 셀러·제품을 기록하면, 인기 셀러 분석과 카테고리별 인사이트가 자동으로 집계돼요.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head" style="align-items:center">
+    <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>인기 셀러 등록</h3></div>
+    <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 등록</summary>
+      <form method="post" action="{{ url_for('trend.add') }}" class="ins-form-grid" style="margin-top:12px">
+        <label>확인일<input name="check_date" type="date"></label>
+        <label>외부몰<select name="platform">{% for p in platforms %}<option>{{ p }}</option>{% endfor %}</select></label>
+        <label>셀러<input name="seller" placeholder="셀러명"></label>
+        <label>제품<input name="product" placeholder="제품명"></label>
+        <label>카테고리<select name="category">{% for c in categories %}<option>{{ c }}</option>{% endfor %}</select></label>
+        <label>공구가(원)<input name="price" type="number" min="0" placeholder="0"></label>
+        <label class="ins-wide">링크<input name="link" placeholder="https://..."></label>
+        <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">등록</button></div>
+      </form>
+    </details>
+  </div>
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>확인일</th><th>외부몰</th><th>셀러</th><th>제품</th><th>카테고리</th><th>공구가</th><th>링크</th><th></th></tr></thead>
+      <tbody>
+        {% for r in records %}
+        <tr>
+          <td>{{ r.check_date or '-' }}</td><td>{{ r.platform or '-' }}</td><td>{{ r.seller or '-' }}</td>
+          <td>{{ r.product or '-' }}</td><td>{{ r.category or '-' }}</td>
+          <td>{{ '{:,}'.format(r.price) + '원' if r.price else '-' }}</td>
+          <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+          <td><form method="post" action="{{ url_for('trend.delete', record_id=r.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 셀러가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:12px"><form method="post" action="{{ url_for('trend.clear') }}" onsubmit="return confirm('전체 삭제할까요?')"><button class="refresh-btn" type="submit">전체 초기화</button></form></p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>인기 셀러 분석</h3><div class="unit">등록된 셀러 데이터를 셀러별로 묶어 등록 횟수·확인된 플랫폼 수·평균 공구가 순으로 나열해요.</div></div></div>
+  <div class="top10-list">
+    {% for s in popular_sellers %}
+      <div class="top10-row">
+        <span class="top10-rank">{{ loop.index }}</span>
+        <div class="top10-info">
+          <div class="top10-name">{{ s.seller }}</div>
+          <div class="top10-sub">{{ s.category }} · {{ s.platform_count }}개 플랫폼에서 확인</div>
+        </div>
+        <div class="top10-meta">
+          <span class="top10-metric rank">{{ s.count }}회 등록</span>
+          <span class="top10-metric" style="font-weight:600;font-size:11px;color:var(--muted)">{{ '{:,}'.format(s.avg_price|round|int) + '원' if s.avg_price is not none else '가격 정보 없음' }}</span>
+          {% if s.link %}<a href="{{ s.link }}" target="_blank" rel="noopener">열기 ↗</a>{% endif %}
+        </div>
+      </div>
+    {% else %}
+      <p class="note" style="margin:0">셀러를 등록하면 인기 셀러 분석이 여기에 나열됩니다.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="chart-card-head"><div><h3>카테고리별 소구 인사이트</h3><div class="unit">등록된 인기 셀러 데이터를 카테고리 기준으로 총합·평균 집계한 결과예요.</div></div></div>
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>카테고리</th><th>등록 건수</th><th>평균 공구가</th><th>확인된 플랫폼 수</th></tr></thead>
+      <tbody>
+        {% for c in category_insights %}
+        <tr><td>{{ c.category }}</td><td>{{ c.count }}건</td><td>{{ ('{:,}'.format(c.avg_price|round|int) + '원') if c.avg_price is not none else '-' }}</td><td>{{ c.platform_count }} / {{ platforms|length }}개</td></tr>
+        {% else %}
+        <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">인기 셀러를 등록하면 카테고리별 집계가 표시됩니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

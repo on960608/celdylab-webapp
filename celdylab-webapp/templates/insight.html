@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}시딩 인사이트 분석 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">ANALYSIS · SEEDING INSIGHT</div>
+  <h2>시딩 인사이트 분석</h2>
+  <p>시딩 콘텐츠의 조회수·반응 데이터를 등록하면 아래 통계와 분석이 자동으로 계산돼요. 실제 DB에 저장되어 팀 전체가 실시간으로 공유해요.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head" style="align-items:center">
+    <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>등록된 콘텐츠</h3></div>
+    <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 추가</summary>
+      <form method="post" action="{{ url_for('insight.add') }}" class="ins-form-grid" style="margin-top:12px">
+        <label>브랜드<select name="brand">{% for b in brands %}<option>{{ b }}</option>{% endfor %}<option>기타</option></select></label>
+        <label>제품명<input name="product" placeholder="제품명 입력"></label>
+        <label>셀러명·인플루언서명<input name="seller" placeholder="이름 또는 계정"></label>
+        <label>팔로워 수<input name="followers" type="number" min="0" placeholder="0"></label>
+        <label class="ins-wide">인스타그램/유튜브/블로그 링크<input name="link" placeholder="https://..."></label>
+        <label>조회수<input name="views" type="number" min="0" placeholder="0"></label>
+        <label>좋아요<input name="likes" type="number" min="0" placeholder="0"></label>
+        <label>댓글<input name="comments" type="number" min="0" placeholder="0"></label>
+        <label>저장<input name="saves" type="number" min="0" placeholder="0"></label>
+        <label>공유<input name="shares" type="number" min="0" placeholder="0"></label>
+        <label class="ins-wide">콘텐츠 특징<textarea name="features" rows="2" placeholder="예: 초반 2초 Before, 비교형, 짧은 자막, 댓글 CTA"></textarea></label>
+        <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">등록</button></div>
+      </form>
+    </details>
+  </div>
+
+  <form method="get" class="ins-toc-grid" style="display:grid;grid-template-columns:180px 1fr;gap:18px;margin-top:14px">
+    <div class="ins-toc">
+      <div class="ins-toc-title">목차</div>
+      <label>브랜드
+        <select name="brand" onchange="this.form.submit()">
+          <option value="">전체</option>
+          {% for b in brands %}<option value="{{ b }}" {{ 'selected' if brand==b }}>{{ b }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>제품
+        <select name="product" onchange="this.form.submit()">
+          <option value="">전체</option>
+          {% for p in products %}<option value="{{ p }}" {{ 'selected' if product==p }}>{{ p }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="ins-toc-count">{{ '시딩 전체' if not brand and not product else '이 조건' }} {{ count }}건</div>
+    </div>
+    <div>
+      <div class="chart-svg-wrap">
+        <table class="data-table">
+          <thead><tr><th>브랜드</th><th>제품</th><th>셀러</th><th>팔로워</th><th>조회수</th><th>반응률</th><th>저장률</th><th>도달률</th><th>링크</th><th></th></tr></thead>
+          <tbody>
+            {% for r in rows %}
+            <tr>
+              <td>{{ r.brand or '-' }}</td><td>{{ r.product or '-' }}</td><td>{{ r.seller or '-' }}</td>
+              <td>{{ '{:,}'.format(r.followers) }}</td><td>{{ '{:,}'.format(r.views) }}</td>
+              <td>{{ pct(r.metrics.engagement) }}</td><td>{{ pct(r.metrics.save_rate) }}</td><td>{{ pct(r.metrics.reach_rate) }}</td>
+              <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기 ↗</a>{% else %}-{% endif %}</td>
+              <td><form method="post" action="{{ url_for('insight.delete', record_id=r.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 콘텐츠가 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="note" style="margin-top:12px"><form method="post" action="{{ url_for('insight.clear') }}" onsubmit="return confirm('전체 삭제할까요?')"><button class="refresh-btn" type="submit">전체 초기화</button></form></p>
+    </div>
+  </form>
+</div>
+
+<div class="stat-row" style="margin-bottom:16px">
+  <div class="stat-tile"><span class="label">등록 콘텐츠 수</span><strong>{{ count }}개</strong></div>
+  <div class="stat-tile"><span class="label">평균 반응률</span><strong>{{ pct(avg_eng) if avg_eng is not none else '-' }}</strong></div>
+  <div class="stat-tile"><span class="label">평균 저장률</span><strong>{{ pct(avg_save) if avg_save is not none else '-' }}</strong></div>
+  <div class="stat-tile"><span class="label">평균 도달률</span><strong>{{ pct(avg_reach) if avg_reach is not none else '-' }}</strong></div>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>가장 반응 좋은 콘텐츠</h3></div></div>
+  <p class="note" style="margin-top:0">{{ top_result }}</p>
+</div>
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>공통으로 잘 된 부분</h3></div></div>
+  <p class="note" style="margin-top:0">{{ reasons_result }}</p>
+</div>
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>다음 콘텐츠 제작 방향</h3></div></div>
+  <p class="note" style="margin-top:0">{{ direction_result }}</p>
+</div>
+
+<div class="chart-card">
+  <div class="chart-card-head"><div><h3>제품별 인사이트 캡처 폴더</h3><div class="unit">스크린샷으로 받는 인사이트 자료를 제품별 카테고리로 정리하고 폴더 링크를 등록해두세요.</div></div></div>
+  <form method="post" action="{{ url_for('insight.add_category') }}" style="display:flex;gap:8px;margin:12px 0">
+    <input name="name" placeholder="제품명 입력 후 카테고리 추가" style="flex:1">
+    <button class="refresh-btn" type="submit">카테고리 추가</button>
+  </form>
+  {% for c in categories %}
+    <div class="gp-block">
+      <b>{{ c.name }}
+        <form method="post" action="{{ url_for('insight.delete_category', category_id=c.id) }}" style="display:inline" onsubmit="return confirm('카테고리와 폴더를 모두 삭제할까요?')">
+          <button type="submit" style="border:0;background:transparent;color:var(--down);font-weight:700;font-size:11.5px;cursor:pointer">카테고리 삭제</button>
+        </form>
+      </b>
+      {% for f in c.folders %}
+        <p><a href="{{ f.url }}" target="_blank" rel="noopener">{{ f.label }} ↗</a>
+        <form method="post" action="{{ url_for('insight.delete_folder', folder_id=f.id) }}" style="display:inline"><button class="ins-del-btn" type="submit">삭제</button></form></p>
+      {% else %}
+        <p>아직 등록된 폴더가 없습니다.</p>
+      {% endfor %}
+      <form method="post" action="{{ url_for('insight.add_folder') }}" style="display:flex;gap:6px;margin-top:6px">
+        <input type="hidden" name="category_id" value="{{ c.id }}">
+        <input name="label" placeholder="폴더 이름" style="flex:1">
+        <input name="url" placeholder="폴더 링크 URL" style="flex:2">
+        <button class="refresh-btn" type="submit">폴더 추가</button>
+      </form>
+    </div>
+  {% else %}
+    <p class="note">등록된 제품 카테고리가 없습니다.</p>
+  {% endfor %}
+</div>
+{% endblock %}

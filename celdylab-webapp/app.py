@@ -10,9 +10,12 @@ import db
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-change-me")
 
-# 앱이 처음 켜질 때 DB 파일/테이블이 없으면 자동으로 만들고, 기본 브랜드·제품 목록과
-# 데모 로그인 계정도 함께 채워줘요. 배포 환경(Railway 등)에서 첫 실행 시 한 번만 동작해요.
-if not os.path.exists(db.DB_PATH):
+# 앱이 켜질 때마다 DB 스키마를 최신 상태로 맞춰줘요 (CREATE TABLE IF NOT EXISTS라서 이미 있는
+# 테이블/데이터는 건드리지 않고, 새로 추가된 테이블만 만들어져요 — 기존 배포에 새 기능을 추가할 때 필요해요).
+_db_was_new = not os.path.exists(db.DB_PATH)
+db.init_db()
+# DB 파일 자체가 처음 생기는 경우(최초 배포)에만 기본 브랜드/제품과 데모 계정을 함께 채워줘요.
+if _db_was_new:
     import seed
     seed.main()
 
@@ -103,8 +106,23 @@ def archive_update():
 
 
 # ---------------------------------------------------------------------------
-# 앞으로 채워질 페이지들 (지금은 자리만) — 여기에 새 블루프린트를 추가하면 돼요
-#   예: from seeding import seeding_bp / app.register_blueprint(seeding_bp)
+# 시딩 인사이트 분석 / 공구 성과 분석 / 협찬 인원 리스트업 — 블루프린트로 등록
+# ---------------------------------------------------------------------------
+from insight import insight_bp
+from gongu import gongu_bp
+from listup import listup_bp
+from trend import trend_bp
+from giveaway import giveaway_bp
+
+app.register_blueprint(insight_bp)
+app.register_blueprint(gongu_bp)
+app.register_blueprint(listup_bp)
+app.register_blueprint(trend_bp)
+app.register_blueprint(giveaway_bp)
+
+
+# ---------------------------------------------------------------------------
+# 아직 콘텐츠를 채우지 못한 가이드 페이지 (STEP 텍스트·스크린샷은 다음 단계에서 이식 예정)
 # ---------------------------------------------------------------------------
 
 @app.route("/seeding")

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}공구 성과 분석 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">ANALYSIS · GROUP BUY PERFORMANCE</div>
+  <h2>공구 성과 분석</h2>
+  <p>월별로 그 달 진행한 셀러를 모아 매출·판매량·반품율을 자동 계산합니다. 실제 DB에 저장되어 팀 전체가 실시간으로 공유해요.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head" style="align-items:center">
+    <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>공구 데이터</h3></div>
+    <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 추가</summary>
+      <form method="post" action="{{ url_for('gongu.add') }}" class="ins-form-grid" style="margin-top:12px">
+        <label>진행 월<input name="month" type="month"></label>
+        <label>판매 채널<select name="channel"><option value="자사몰">자사몰</option><option value="외부채널">외부채널</option></select></label>
+        <label>브랜드<select name="brand">{% for b in brands %}<option>{{ b }}</option>{% endfor %}</select></label>
+        <label>제품명<input name="product" placeholder="제품명 입력"></label>
+        <label>셀러명·인플루언서명<input name="seller" placeholder="이름 또는 계정"></label>
+        <label>팔로워 수<input name="followers" type="number" min="0" placeholder="0"></label>
+        <label class="ins-wide">업로드 영상·게시물 링크<input name="link" placeholder="https://..."></label>
+        <label>매출(원)<input name="revenue" type="number" min="0" placeholder="0"></label>
+        <label>총 판매 수량<input name="sold_qty" type="number" min="0" placeholder="0"></label>
+        <label>반품 수량(취소+불량 합계)<input name="return_qty" type="number" min="0" placeholder="0"></label>
+        <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">등록</button></div>
+      </form>
+    </details>
+  </div>
+
+  <form method="get" class="ins-toc-grid" style="display:grid;grid-template-columns:180px 1fr;gap:18px;margin-top:14px">
+    <div class="ins-toc">
+      <div class="ins-toc-title">목차</div>
+      <label>브랜드
+        <select name="brand" onchange="this.form.submit()">
+          <option value="">전체</option>
+          {% for b in brands %}<option value="{{ b }}" {{ 'selected' if brand==b }}>{{ b }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>월
+        <select name="month" onchange="this.form.submit()">
+          <option value="">전체</option>
+          {% for m in months %}<option value="{{ m }}" {{ 'selected' if month==m }}>{{ m }}월</option>{% endfor %}
+        </select>
+      </label>
+      <div class="ins-toc-count">전체 {{ count }}건 등록됨</div>
+    </div>
+    <div>
+      <div class="chart-svg-wrap">
+        <table class="data-table">
+          <thead><tr><th>월</th><th>제품</th><th>채널</th><th>셀러</th><th>팔로워</th><th>매출</th><th>판매량</th><th>1천명당 매출</th><th>반품율</th><th>링크</th><th></th></tr></thead>
+          <tbody>
+            {% for r in records %}
+            <tr>
+              <td>{{ r.month or '-' }}</td><td>{{ r.product or '-' }}</td><td>{{ r.channel or '-' }}</td><td>{{ r.seller or '-' }}</td>
+              <td>{{ '{:,}'.format(r.followers) }}</td><td>{{ won(r.revenue) }}</td><td>{{ '{:,}'.format(net_sold(r)) }}</td>
+              <td>{{ won(per1k_of(r)) }}</td><td>{{ pct(return_pct(r)) }}</td>
+              <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+              <td><form method="post" action="{{ url_for('gongu.delete', record_id=r.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="11" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 데이터가 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="note" style="margin-top:12px"><form method="post" action="{{ url_for('gongu.clear') }}" onsubmit="return confirm('전체 삭제할까요?')"><button class="refresh-btn" type="submit">전체 데이터 초기화</button></form></p>
+    </div>
+  </form>
+</div>
+
+<div class="stat-row" style="margin-bottom:16px">
+  <div class="stat-tile"><span class="label">총 진행 셀러</span><strong>{{ count }}명</strong></div>
+  <div class="stat-tile"><span class="label">평균 매출</span><strong>{{ won(avg_revenue) }}</strong></div>
+  <div class="stat-tile"><span class="label">팔로워 1,000명당 매출</span><strong>{{ won(per1k) }}</strong></div>
+  <div class="stat-tile"><span class="label">평균 반품율</span><strong>{{ pct(avg_return) }}</strong></div>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">SELLER ANALYSIS</div><h3>셀러별 성과 분석</h3><div class="unit">모든 회차를 셀러별로 합산 (매출 높은 순)</div></div></div>
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>셀러</th><th>팔로워</th><th>대표 제품</th><th>총 매출</th><th>총 판매수량</th><th>평균 반품율</th><th>진행 횟수</th></tr></thead>
+      <tbody>
+        {% for s in sellers %}
+        <tr><td>{{ s.name }}</td><td>{{ '{:,}'.format(s.followers) }}</td><td>{{ s.top_product }}</td><td>{{ won(s.total_revenue) }}</td><td>{{ '{:,}'.format(s.total_sold) }}개</td><td>{{ pct(s.avg_return) }}</td><td>{{ s.count }}회</td></tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 데이터가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+  <div class="chart-card">
+    <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">RECOMMENDATION</div><h3>신규 공구 예상 계산기</h3><div class="unit">입력한 팔로워 수와 같은 구간의 기존 셀러 성과를 우선 비교해요.</div></div></div>
+    <form method="get" class="ins-form-grid" style="grid-template-columns:1fr 1fr;margin-top:10px">
+      <input type="hidden" name="brand" value="{{ brand or '' }}"><input type="hidden" name="month" value="{{ month or '' }}">
+      <label>예상 셀러 팔로워 수<input name="fc_followers" type="number" min="0" value="{{ fc_followers or '' }}"></label>
+      <label>예상 판매 단가<input name="fc_price" type="number" min="0" value="{{ fc_price or '' }}"></label>
+      <div class="ins-wide"><button class="refresh-btn" type="submit">예상치 계산</button></div>
+    </form>
+    {% if forecast %}
+      {% if forecast.empty %}
+        <p class="note">비교할 기존 데이터가 없어요.</p>
+      {% else %}
+        <p class="note">비교 기준: {{ ('팔로워 ' + forecast.basis_tier + ' 구간의 기존 ' + forecast.basis_count|string + '건') if forecast.used_tier else ('팔로워 ' + forecast.basis_tier + ' 구간 데이터가 부족해(' + forecast.basis_count|string + '건) 전체 ' + forecast.total_count|string + '건 평균으로 계산') }}</p>
+        <div class="gp-forecast-grid">
+          <div class="gp-forecast-tile"><span>예상 매출</span><strong>{{ forecast.revenue }}</strong></div>
+          <div class="gp-forecast-tile"><span>예상 판매 수량</span><strong>{{ forecast.qty }}</strong></div>
+          <div class="gp-forecast-tile"><span>보수적 재고</span><strong>{{ forecast.low }}</strong></div>
+          <div class="gp-forecast-tile"><span>권장 재고</span><strong>{{ forecast.mid }}</strong></div>
+          <div class="gp-forecast-tile"><span>공격적 재고</span><strong>{{ forecast.high }}</strong></div>
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+  <div class="chart-card">
+    <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">FOLLOWER TIERS</div><h3>팔로워 구간별 평균</h3></div></div>
+    {% for t in tiers %}
+      <div class="gp-block"><b>{{ t.tier }}</b><p>평균 매출 {{ won(t.avg_revenue) }} · 평균 판매 {{ '{:,}'.format(t.avg_sold|round|int) }}개</p></div>
+    {% else %}
+      <p class="note">데이터를 추가하면 구간별 평균이 표시됩니다.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">PRODUCT BREAKDOWN</div><h3>제품별 평균</h3><div class="unit">반품율이 높은 제품은 과발주·악성재고 위험이 있어요.</div></div></div>
+  {% for p in products %}
+    <div class="gp-block">
+      <b>{{ p.product }} <span class="ins-badge {{ 'fail' if p.risk=='위험' else ('warn' if p.risk=='주의' else 'pass') }}">반품율 {{ p.risk }}</span></b>
+      <p>등록 {{ p.count }}건 · 평균 매출 {{ won(p.avg_revenue) }} · 평균 판매 {{ '{:,}'.format(p.avg_sold|round|int) }}개 · 평균 반품율 {{ pct(p.avg_return) }}</p>
+    </div>
+  {% else %}
+    <p class="note">데이터를 추가하면 제품별 평균이 표시됩니다.</p>
+  {% endfor %}
+</div>
+{% endblock %}
