@@ -1,11 +1,11 @@
 import os
 
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 
 import db
 from analysis import (
     parse_comments_text, parse_comments_spreadsheet, draw_giveaway_winners,
-    fetch_ig_comments_via_graph_api, BRANDS,
+    fetch_ig_comments_via_graph_api, build_winners_excel, BRANDS,
 )
 
 giveaway_bp = Blueprint("giveaway", __name__, url_prefix="/giveaway")
@@ -96,6 +96,27 @@ def draw():
     result = db.get_giveaway_event(event_id)
     result["stats"] = stats
     return render_template("giveaway.html", brands=BRANDS, events=events, api_configured=_api_configured(), result=result)
+
+
+@giveaway_bp.route("/<int:event_id>/export")
+def export(event_id):
+    event = db.get_giveaway_event(event_id)
+    if not event:
+        flash("추첨 기록을 찾을 수 없어요.")
+        return redirect(url_for("giveaway.index"))
+    if not event["winners"]:
+        flash("당첨자가 없어서 엑셀로 내려받을 내용이 없어요.")
+        return redirect(url_for("giveaway.index"))
+
+    buf = build_winners_excel(event)
+    date_part = (event["created_at"] or "")[:10] or "기록"
+    filename = f"댓글이벤트_당첨자_{date_part}_{event_id}.xlsx"
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @giveaway_bp.route("/<int:event_id>/delete", methods=["POST"])

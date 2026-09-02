@@ -303,6 +303,38 @@ def draw_giveaway_winners(comments, event_type, keyword, winner_count, excluded_
     return winners, stats
 
 
+def build_winners_excel(event):
+    """당첨자 명단(event['winners'])을 엑셀(.xlsx) 파일로 만들어서 메모리 버퍼로 돌려줘요."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "당첨자 명단"
+
+    ws.append(["순번", "Instagram 아이디", "작성 댓글", "필수 단어 포함"])
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    for w in event["winners"]:
+        matched = w["keyword_matched"]
+        matched_text = "포함" if matched == 1 else ("미포함" if matched == 0 else "-")
+        ws.append([w["rank"], w["username"], w["comment_text"] or "", matched_text])
+
+    ws.column_dimensions["A"].width = 8
+    ws.column_dimensions["B"].width = 24
+    ws.column_dimensions["C"].width = 50
+    ws.column_dimensions["D"].width = 14
+    for row in ws.iter_rows(min_row=2):
+        row[2].alignment = Alignment(wrap_text=True, vertical="top")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
 def fetch_ig_comments_via_graph_api(post_url):
     """
     셀디랩이 직접 운영하는 인스타그램 비즈니스 계정에 연동된 게시물의 댓글을 Graph API로 가져와요.
