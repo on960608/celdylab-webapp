@@ -1,9 +1,9 @@
 """
 외부몰 트렌드 자동 수집 — 82market · 지금하는공구(09now.com) · 공구모아(09more.com) ·
-공구팡팡(09pangpang.com)에서 지금 진행중인 인기 셀러·상품을 읽어와서 trend_records에
-자동으로 채워 넣어요.
+공구팡팡(09pangpang.com) · 맘캘린더(momcalendar.com)에서 지금 진행중인 인기 셀러·상품을
+읽어와서 trend_records에 자동으로 채워 넣어요.
 
-*** 중요: 이 네 사이트만 자동화한 이유 ***
+*** 중요: 이 다섯 사이트만 자동화한 이유 ***
 셀디랩이 원래 모니터링하던 채널들(캘린·82market·위시버니·지금하는공구·인공·공구모아) 중
 82market과 지금하는공구(09now.com)만 로그인 없이 접근 가능한 '공개 페이지' 안에
 목록이 그대로 서버에서 완성되어 내려와요 (사람이 브라우저로 보는 것과 완전히 동일한
@@ -13,12 +13,14 @@
 그 사이트의 비공개 내부 API를 호출해야만 채워지는 방식이라, 이 안전한 방식으로는
 데이터를 가져올 수 없어요. 그래서 '공구모아' 자리는 같은 이름의 다른 사이트인
 09more.com(마찬가지로 공개 페이지에 목록이 그대로 내려옴)으로 대체했고, 캘린·위시버니·
-인공 세 자리는 같은 방식으로 안전하게 읽을 수 있는 공구팡팡(09pangpang.com) 하나로
-대체했어요 — 나머지 두 자리를 대신할 만한 사이트는 찾지 못해서(대부분 비공개 API 방식
-이거나 이 장르가 아닌 B2B 벤더 플랫폼) 지금은 4개로 운영해요.
+인공 세 자리는 같은 방식으로 안전하게 읽을 수 있는 공구팡팡(09pangpang.com)과
+맘캘린더(momcalendar.com) 두 곳으로 대체했어요. 맘캘린더는 홈 화면 자체는 자바스크립트로
+채워지지만, 카테고리별 하위 페이지(/c/{카테고리}공구.html)는 서버에서 완성되어 내려오는
+걸 직접 확인했어요 — 나머지 한 자리를 대신할 만한 사이트는 끝내 찾지 못해서(대부분 비공개
+API 방식이거나 이 장르가 아닌 B2B 벤더/마케팅 플랫폼) 지금은 5개로 운영해요.
 
 *** 유지보수 참고 ***
-네 사이트 모두 공식 API가 아니라 화면 HTML 구조를 그대로 읽는 방식이에요. 사이트가
+다섯 사이트 모두 공식 API가 아니라 화면 HTML 구조를 그대로 읽는 방식이에요. 사이트가
 디자인을 바꾸면 이 파싱 로직도 깨질 수 있어요 — 그럴 땐 fetch_* 함수 하나가 빈 리스트를
 돌려주거나 예외를 던질 뿐, 나머지 사이트 수집에는 영향 없어요(trend.py의 refresh()에서
 사이트별로 각각 try/except 처리해요).
@@ -387,10 +389,76 @@ def fetch_09pangpang(limit=20):
     return records
 
 
+# ---------------------------------------------------------------------------
+# 맘캘린더 — https://momcalendar.com/
+#   홈 화면 자체는 자바스크립트로 목록을 채우는 방식이라 자동화할 수 없지만, 카테고리별
+#   페이지(/c/{카테고리}공구.html)는 서버에서 완성된 채로 내려와요. 카드 하나 =
+#   <a class="card live">(지금 진행 중) 또는 <a class="card">(곧 열리는, live 없음) 안에
+#   <b>상품명</b>과 <span>셀러 · 시작일 ~ 종료일</span>. 페이지 자체가 이미 카테고리별로
+#   나뉘어 있어서, 뷰티·여행 카테고리는 그 페이지를 아예 요청하지 않는 것만으로 걸러져요.
+# ---------------------------------------------------------------------------
+
+_MOMCALENDAR_SELLER_RE = re.compile(r"^(.*?)\s*·\s*\d{4}-\d{2}-\d{2}")
+
+# 요청에 따라 뷰티·여행 카테고리 페이지는 목록에서 아예 빼요.
+_MOMCALENDAR_CATEGORIES = {
+    "가전공구": "생활용품",
+    "식품공구": "기타",
+    "육아공구": "기타",
+    "리빙공구": "리빙",
+    "패션공구": "패션잡화",
+    "건강공구": "기타",
+    "반려동물공구": "기타",
+}
+
+
+def fetch_momcalendar(limit=20):
+    records = []
+    seen = set()
+    for slug, category in _MOMCALENDAR_CATEGORIES.items():
+        if len(records) >= limit:
+            break
+        try:
+            soup = _get_soup(f"https://momcalendar.com/c/{slug}.html")
+        except Exception:
+            continue
+        for a in soup.select("a.card"):
+            b = a.find("b")
+            span = a.find("span")
+            if not b or not span:
+                continue
+            product = b.get_text(strip=True)
+            span_text = span.get_text(strip=True)
+            m = _MOMCALENDAR_SELLER_RE.match(span_text)
+            seller = m.group(1).strip() if m else ""
+            if not product or not seller:
+                continue
+
+            key = (seller, product)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            records.append({
+                "check_date": date.today().isoformat(),
+                "platform": "맘캘린더",
+                "seller": seller,
+                "product": product,
+                "category": category,
+                "price": 0,
+                "link": a.get("href") or "",
+            })
+            if len(records) >= limit:
+                break
+
+    return records
+
+
 # 이름(라벨) → 수집 함수. trend.py의 /refresh 에서 이 순서대로 실행해요.
 SCRAPERS = [
     ("82market", fetch_82market),
     ("지금하는공구", fetch_09now),
     ("공구모아", fetch_09more),
     ("공구팡팡", fetch_09pangpang),
+    ("맘캘린더", fetch_momcalendar),
 ]
