@@ -171,6 +171,45 @@ details > summary::-webkit-details-marker { display: none; }
 .gp-block b { display: block; font-size: 13px; margin-bottom: 4px; color: var(--ink); }
 .gp-block p { margin: 0; font-size: 12px; color: var(--muted); }
 
+/* ---------- guide pages: process steps ---------- */
+.steps { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(210px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; }
+.step { background: var(--panel-soft); border: 1px solid var(--line); border-radius: 13px; padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 9px; }
+.step .badge { font-size: 10px; color: var(--accent-deep); background: var(--accent-soft); border-radius: 999px; padding: 6px 10px; width: max-content; font-weight: 800; letter-spacing: .02em; }
+.step h3 { font-size: 14px; font-weight: 800; }
+.step p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+
+/* ---------- guide pages: sub-tabs + doc blocks ---------- */
+.guide-tabs-wrap { display: flex; flex-direction: column; gap: 0; }
+.subtab-bar { display: flex; gap: 8px; overflow-x: auto; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 18px; }
+.subtab { flex: none; font-family: inherit; cursor: pointer; background: var(--accent-soft); color: var(--accent-deep); border: 1px solid transparent; padding: 8px 13px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; transition: background .15s ease, color .15s ease; }
+.subtab:hover { background: color-mix(in oklab, var(--accent-soft) 55%, var(--accent) 12%); }
+.subtab.active { background: var(--accent); color: #fff; }
+.step-guide { display: none; }
+.step-guide.active { display: block; }
+
+.doc-block { background: var(--panel-soft); border: 1px solid var(--line); border-radius: 13px; padding: 17px 18px; margin-bottom: 11px; }
+.doc-block h3 { font-size: 14.5px; font-weight: 800; margin-bottom: 9px; }
+.doc-block p { margin: 0 0 8px; font-size: 13.5px; color: var(--muted); line-height: 1.75; }
+.doc-block p:last-child { margin-bottom: 0; }
+.doc-block ul, .doc-block ol { margin: 0 0 8px; padding-left: 19px; }
+.doc-block ul:last-child, .doc-block ol:last-child { margin-bottom: 0; }
+.doc-block li { font-size: 13.5px; color: var(--muted); line-height: 1.75; margin-bottom: 4px; }
+.doc-block b { color: var(--ink); }
+.img-note { color: var(--muted); font-size: 11.5px; background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+.step-shots { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+.step-shot { flex: 1 1 220px; max-width: 420px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
+.step-shot img { display: block; width: 100%; height: auto; border-radius: 6px; }
+.step-shot span { display: block; font-size: 11px; color: var(--muted2); text-align: center; margin-top: 6px; }
+
+.copy-box { background: linear-gradient(160deg, #161f38, #0f1526); color: #e7ebf7; padding: 19px; border-radius: 13px; position: relative; white-space: pre-line; line-height: 1.75; font-size: 13.5px; }
+.copy-box .copy { position: absolute; right: 9px; top: 9px; border: 0; cursor: pointer; background: #fff; color: #14132b; border-radius: 8px; padding: 7px 10px; font-weight: 700; font-size: 12px; font-family: inherit; }
+
+.platform-card { display: flex; flex-direction: column; gap: 4px; text-decoration: none; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 13px; padding: 14px 16px; transition: border-color .15s ease, transform .15s ease; }
+.platform-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.platform-card b { font-size: 14px; font-weight: 800; color: var(--ink); }
+.platform-card span { font-size: 12px; color: var(--muted); }
+.platform-card span::after { content: " →"; color: var(--accent-deep); font-weight: 700; }
+
 /* ---------- top10 / popular seller list ---------- */
 .top10-list { display: flex; flex-direction: column; }
 .top10-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-bottom: 1px solid var(--line); }
