@@ -37,13 +37,26 @@ _TIMEOUT = 10
 def _get_soup(url):
     resp = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
     resp.raise_for_status()
+    # 서버가 응답 헤더에 charset을 안 적어주면 requests가 기본값(ISO-8859-1)으로
+    # 잘못 해석해서 한글이 다 깨져요(예: 09more.com). 그럴 때만 실제 인코딩을 다시
+    # 감지해서 써요 — charset이 이미 명시돼 있으면 그대로 두는 게 더 안전해요.
+    content_type = resp.headers.get("content-type", "")
+    if "charset" not in content_type.lower():
+        resp.encoding = resp.apparent_encoding
     return BeautifulSoup(resp.text, "html.parser")
 
 
+_SKIP_TAGS = {"script", "style", "noscript"}
+
+
 def _leaf_texts(tag):
-    """tag 안에서 '더 이상 자식 태그가 없는' 요소들의 글자만 순서대로 뽑아요."""
+    """tag 안에서 '더 이상 자식 태그가 없는' 요소들의 글자만 순서대로 뽑아요.
+    <script>/<style> 태그는 화면에 보이는 글자가 아니라 코드·CSS 텍스트라서 제외해요
+    (SSR 단계에서 각 카드 근처에 style 태그가 섞여 나오는 사이트가 있어서 꼭 필요해요)."""
     out = []
     for el in tag.find_all(True):
+        if el.name in _SKIP_TAGS:
+            continue
         if not el.find(True):
             t = el.get_text(strip=True)
             if t:
@@ -116,6 +129,7 @@ def fetch_82market(limit=20):
 # ---------------------------------------------------------------------------
 
 _PRICE_WON_RE = re.compile(r"^[\d,]+원$")
+_PERCENT_RE = re.compile(r"^\d+%$")
 
 
 def fetch_09now(limit=20):
@@ -135,22 +149,25 @@ def fetch_09now(limit=20):
             continue
 
         texts = _leaf_texts(a)
+
+        # 할인 중인 카드는 "정가 → 할인율(%) → 할인가" 순으로 가격이 두 번 나와요.
+        # "N원" 형태 중 마지막 값이 항상 지금 실제로 살 수 있는 가격이에요.
         price = 0
         for t in texts:
             if _PRICE_WON_RE.match(t):
                 try:
                     price = int(t[:-1].replace(",", ""))
                 except ValueError:
-                    price = 0
-                break
+                    pass
 
-        seller = next(
-            (
-                t for t in texts
-                if t != product and not _PRICE_WON_RE.match(t) and "마감" not in t
-            ),
-            None,
-        )
+        # 셀러명은 카드에서 항상 맨 마지막 텍스트예요. 마감뱃지·가격·할인율(%)이 그
+        # 앞에 섞여 있을 수 있어서, 뒤에서부터 그런 값이 아닌 첫 텍스트를 찾아요.
+        seller = None
+        for t in reversed(texts):
+            if t == product or _PRICE_WON_RE.match(t) or _PERCENT_RE.match(t) or "마감" in t:
+                continue
+            seller = t
+            break
         if not seller:
             continue
 
