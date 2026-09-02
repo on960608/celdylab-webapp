@@ -4,7 +4,7 @@
 <div class="block-head">
   <div class="eyebrow">ANALYSIS · EXTERNAL MALL TREND</div>
   <h2>외부몰 트렌드 분석</h2>
-  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아)에서 확인한 인기 셀러·제품을 기록하면, 인기 셀러 분석과 카테고리별 인사이트가 자동으로 집계돼요. 이 중 82market·지금하는공구·공구모아 3개는 아래 "⚡ 자동 생성" 버튼으로 지금 진행중인 인기 셀러·상품을 바로 채워 넣을 수 있어요.</p>
+  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아)에서 확인한 인기 셀러·제품을 기록하면, 인기 셀러 분석과 카테고리별 인사이트가 자동으로 집계돼요. 이 중 82market·지금하는공구·공구모아 3개는 이 페이지를 새로고침할 때마다 자동으로 다시 수집해서 최신 상태로 바뀌어요(이전 자동 데이터는 새 데이터로 교체되고, 직접 등록한 기록은 그대로 남아요). 지금 바로 갱신하고 싶으면 아래 "⚡ 자동 생성" 버튼을 눌러도 돼요.</p>
 </div>
 
 <div class="chart-card" style="margin-bottom:16px">
@@ -31,7 +31,7 @@
     <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>인기 셀러 등록</h3></div>
     <div style="display:flex;gap:8px;align-items:center">
       <form method="post" action="{{ url_for('trend.refresh') }}">
-        <button class="refresh-btn" type="submit" title="82market · 지금하는공구 · 공구모아를 지금 다시 읽어와서 자동 등록해요 (몇 초~30초 정도 걸려요)">⚡ 자동 생성</button>
+        <button class="refresh-btn" type="submit" title="82market · 지금하는공구 · 공구모아를 지금 이 순간 다시 읽어와서 이전 자동 데이터를 새 데이터로 바로 교체해요 (몇 초~30초 정도 걸려요). 참고: 새로고침만 해도 5분에 한 번은 자동으로 갱신돼요.">⚡ 자동 생성</button>
       </form>
       <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 등록</summary>
       <form method="post" action="{{ url_for('trend.add') }}" class="ins-form-grid" style="margin-top:12px">
