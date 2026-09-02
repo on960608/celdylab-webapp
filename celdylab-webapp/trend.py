@@ -8,9 +8,9 @@ from analysis import TREND_PLATFORMS, TREND_CATEGORIES, TREND_PLATFORM_LINKS
 
 trend_bp = Blueprint("trend", __name__, url_prefix="/trend")
 
-# 새로고침할 때마다 매번 82market·지금하는공구·공구모아를 다시 읽어오면 너무 잦은
-# 요청이 될 수 있어서, 최근 자동 수집이 이 시간(초) 안에 있었으면 새로고침은 건너뛰고
-# 기존 데이터를 그대로 보여줘요. "⚡ 자동 생성" 버튼은 이 제한 없이 항상 바로 실행돼요.
+# 새로고침할 때마다 매번 모니터링 대상 플랫폼(trend_scraper.SCRAPERS 참고)을 다시 읽어오면
+# 너무 잦은 요청이 될 수 있어서, 최근 자동 수집이 이 시간(초) 안에 있었으면 새로고침은
+# 건너뛰고 기존 데이터를 그대로 보여줘요. "⚡ 자동 생성" 버튼은 이 제한 없이 항상 바로 실행돼요.
 AUTO_REFRESH_MIN_INTERVAL_SECONDS = 300
 
 
@@ -34,7 +34,7 @@ def _most_common(values):
 
 
 def _run_auto_scrape():
-    """82market·지금하는공구·공구모아(09more.com)를 지금 이 순간 다시 읽어와서, 이전
+    """모니터링 대상 플랫폼(trend_scraper.SCRAPERS 참고)을 지금 이 순간 다시 읽어와서, 이전
     자동 수집 기록은 지우고 새로 읽은 걸로 교체해요(수동으로 '+ 등록'한 기록은 그대로
     둬요) — 그래야 매번 '지금 이 순간'의 인기 순위만 남아요."""
     import trend_scraper
@@ -178,8 +178,8 @@ def clear():
 
 @trend_bp.route("/refresh", methods=["POST"])
 def refresh():
-    """'⚡ 자동 생성' 버튼 — 새로고침 자동 갱신과 달리 대기시간 없이 지금 바로 82market·
-    지금하는공구·공구모아를 다시 읽어와서 이전 자동 수집 기록을 새 데이터로 교체해요."""
+    """'⚡ 자동 생성' 버튼 — 새로고침 자동 갱신과 달리 대기시간 없이 지금 바로 모니터링
+    대상 플랫폼을 다시 읽어와서 이전 자동 수집 기록을 새 데이터로 교체해요."""
     total, summaries = _run_auto_scrape()
 
     if total:

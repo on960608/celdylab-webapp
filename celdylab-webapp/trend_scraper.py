@@ -1,9 +1,10 @@
 """
-외부몰 트렌드 자동 수집 — 82market · 지금하는공구(09now.com) · 공구모아(09more.com)에서
-지금 진행중인 인기 셀러·상품을 읽어와서 trend_records에 자동으로 채워 넣어요.
+외부몰 트렌드 자동 수집 — 82market · 지금하는공구(09now.com) · 공구모아(09more.com) ·
+공구팡팡(09pangpang.com)에서 지금 진행중인 인기 셀러·상품을 읽어와서 trend_records에
+자동으로 채워 넣어요.
 
-*** 중요: 이 세 사이트만 자동화한 이유 ***
-셀디랩이 원래 모니터링하던 6개 채널(캘린·82market·위시버니·지금하는공구·인공·공구모아) 중
+*** 중요: 이 네 사이트만 자동화한 이유 ***
+셀디랩이 원래 모니터링하던 채널들(캘린·82market·위시버니·지금하는공구·인공·공구모아) 중
 82market과 지금하는공구(09now.com)만 로그인 없이 접근 가능한 '공개 페이지' 안에
 목록이 그대로 서버에서 완성되어 내려와요 (사람이 브라우저로 보는 것과 완전히 동일한
 정보를 그냥 읽어오는 방식이라 안전해요).
@@ -11,10 +12,13 @@
 캘린·위시버니·인공·(원래) gonggumoa.com은 화면에 보이는 상품 목록이 자바스크립트가
 그 사이트의 비공개 내부 API를 호출해야만 채워지는 방식이라, 이 안전한 방식으로는
 데이터를 가져올 수 없어요. 그래서 '공구모아' 자리는 같은 이름의 다른 사이트인
-09more.com(마찬가지로 공개 페이지에 목록이 그대로 내려옴)으로 대체했어요.
+09more.com(마찬가지로 공개 페이지에 목록이 그대로 내려옴)으로 대체했고, 캘린·위시버니·
+인공 세 자리는 같은 방식으로 안전하게 읽을 수 있는 공구팡팡(09pangpang.com) 하나로
+대체했어요 — 나머지 두 자리를 대신할 만한 사이트는 찾지 못해서(대부분 비공개 API 방식
+이거나 이 장르가 아닌 B2B 벤더 플랫폼) 지금은 4개로 운영해요.
 
 *** 유지보수 참고 ***
-세 사이트 모두 공식 API가 아니라 화면 HTML 구조를 그대로 읽는 방식이에요. 사이트가
+네 사이트 모두 공식 API가 아니라 화면 HTML 구조를 그대로 읽는 방식이에요. 사이트가
 디자인을 바꾸면 이 파싱 로직도 깨질 수 있어요 — 그럴 땐 fetch_* 함수 하나가 빈 리스트를
 돌려주거나 예외를 던질 뿐, 나머지 사이트 수집에는 영향 없어요(trend.py의 refresh()에서
 사이트별로 각각 try/except 처리해요).
@@ -302,9 +306,91 @@ def fetch_09more(limit=20):
     return records
 
 
+# ---------------------------------------------------------------------------
+# 공구팡팡 — https://09pangpang.com/
+#   홈 화면 "인스타 최신 공구" 카드마다 셀러 핸들·팔로워수·경과시간·상품명(들)·
+#   카테고리(대/소분류)·오픈 상태가 함께 내려와요. 셀러 한 명이 상품을 여러 개
+#   동시에 올리기도 해서, 한 카드 안에 "N일 후 오픈 예정"처럼 오픈 상태 뱃지가
+#   여러 번 나올 수 있어요 — 뱃지가 나올 때마다 상품 하나가 끝나는 걸로 봐요.
+# ---------------------------------------------------------------------------
+
+_09PANGPANG_STATUS_RE = re.compile(r"^(오늘|내일|어제|\d+일\s*(전|후))\s*(\d+시\s*)?오픈(\s*예정)?$")
+
+_09PANGPANG_CATEGORY_MAP = {
+    "주방용품": "주방용품", "주방가전": "주방용품",
+    "생활용품": "생활용품", "생활가전": "생활용품", "청소/세제": "생활용품", "육아용품": "생활용품",
+    "의류": "패션잡화", "신발": "패션잡화", "액세서리": "패션잡화",
+}
+# 요청에 따라 이 대분류 카테고리는 아예 등록하지 않아요.
+_09PANGPANG_EXCLUDED_MAIN_CATEGORIES = {"뷰티", "여행"}
+
+
+def _is_09pangpang_card(tag):
+    if tag.name != "div":
+        return False
+    classes = tag.get("class") or []
+    return "overflow-hidden" in classes and "bg-card" in classes
+
+
+def fetch_09pangpang(limit=20):
+    soup = _get_soup("https://09pangpang.com/")
+    records = []
+    seen = set()
+
+    for card in soup.find_all(_is_09pangpang_card):
+        texts = [t for t in _leaf_texts(card) if t]
+        if "|" not in texts:
+            continue
+        bar_idx = texts.index("|")
+        if bar_idx < 1:
+            continue
+        seller = texts[0]
+        rest = texts[bar_idx + 2:]  # 팔로워수·"|"·경과시간 다음부터가 실제 상품 목록이에요.
+
+        a = card.find_parent("a") or card.find("a")
+        link = ""
+        if a and a.get("href"):
+            href = a["href"]
+            link = href if href.startswith("http") else "https://09pangpang.com" + href
+
+        group = []
+        for t in rest:
+            group.append(t)
+            if not _09PANGPANG_STATUS_RE.match(t):
+                continue
+            # group이 [상품명, 상태] 또는 [상품명, 대분류, 소분류, 상태] 형태로 닫혀요.
+            product = group[0]
+            main_category = group[-3] if len(group) >= 4 else None
+            sub_category = group[-2] if len(group) >= 3 else None
+            group = []
+
+            if main_category in _09PANGPANG_EXCLUDED_MAIN_CATEGORIES:
+                continue
+
+            key = (seller, product)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            records.append({
+                "check_date": date.today().isoformat(),
+                "platform": "공구팡팡",
+                "seller": seller,
+                "product": product,
+                "category": _09PANGPANG_CATEGORY_MAP.get(sub_category, "기타"),
+                "price": 0,
+                "link": link,
+            })
+            if len(records) >= limit:
+                return records
+
+    return records
+
+
 # 이름(라벨) → 수집 함수. trend.py의 /refresh 에서 이 순서대로 실행해요.
 SCRAPERS = [
     ("82market", fetch_82market),
     ("지금하는공구", fetch_09now),
     ("공구모아", fetch_09more),
+    ("공구팡팡", fetch_09pangpang),
 ]
