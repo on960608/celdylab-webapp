@@ -356,6 +356,26 @@ def clear_trend_records():
     conn.close()
 
 
+def clear_auto_trend_records():
+    """자동 수집(82market·지금하는공구·공구모아)으로 들어온 기록만 지워요.
+    수동으로 '+ 등록'한 기록은 건드리지 않아요."""
+    conn = get_conn()
+    conn.execute("DELETE FROM trend_records WHERE created_by = 'auto-refresh'")
+    conn.commit()
+    conn.close()
+
+
+def latest_auto_trend_refresh_at():
+    """가장 최근 자동 수집이 언제 있었는지(created_at, UTC ISO 문자열) 돌려줘요.
+    한 번도 없었으면 None이에요."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT MAX(created_at) AS latest FROM trend_records WHERE created_by = 'auto-refresh'"
+    ).fetchone()
+    conn.close()
+    return row["latest"] if row else None
+
+
 # ---------- 댓글 이벤트 추첨 ----------
 
 def create_giveaway_event(data, winners, created_by):
