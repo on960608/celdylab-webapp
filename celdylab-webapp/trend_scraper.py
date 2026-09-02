@@ -69,7 +69,14 @@ def _leaf_texts(tag):
 #   1) '지금 활발한 인플루언서' 코너 = 실제 인기 순위 (rank 1, 2, 3 ...)
 #   2) 오늘 진행중인 포스트 카드 = 셀러 + 상품명
 #   두 정보를 셀러명으로 이어붙여서, 순위가 높은 셀러의 포스트를 우선으로 올려요.
+#
+#   포스트 카드 맨 앞에는 마감까지 남은 기간을 알려주는 뱃지 텍스트가 있어요.
+#   "오늘 마감" 말고도 "D-28"·"오픈 D-60" 같은 형태가 있어서, 이런 뱃지가 셀러명으로
+#   잘못 인식되지 않도록 패턴으로 걸러내요.
 # ---------------------------------------------------------------------------
+
+_82MARKET_BADGE_RE = re.compile(r"^(오늘\s*마감|(오픈\s*)?D-\d+)$")
+
 
 def fetch_82market(limit=20):
     soup = _get_soup("https://www.82market.com/")
@@ -100,7 +107,10 @@ def fetch_82market(limit=20):
         if not h3:
             continue
         seller = next(
-            (t for t in _leaf_texts(a) if t not in ("오늘 마감",) and t != h3.get_text(strip=True)),
+            (
+                t for t in _leaf_texts(a)
+                if not _82MARKET_BADGE_RE.match(t) and t != h3.get_text(strip=True)
+            ),
             None,
         )
         if not seller:
