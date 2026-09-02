@@ -4,14 +4,14 @@
 <div class="block-head">
   <div class="eyebrow">ANALYSIS · EXTERNAL MALL TREND</div>
   <h2>외부몰 트렌드 분석</h2>
-  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아)에서 확인한 인기 셀러·제품을 기록하면, 인기 셀러 분석과 카테고리별 인사이트가 자동으로 집계돼요.</p>
+  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아)에서 확인한 인기 셀러·제품을 기록하면, 인기 셀러 분석과 카테고리별 인사이트가 자동으로 집계돼요. 이 중 82market·지금하는공구·공구모아 3개는 아래 "⚡ 자동 생성" 버튼으로 지금 진행중인 인기 셀러·상품을 바로 채워 넣을 수 있어요.</p>
 </div>
 
 <div class="chart-card" style="margin-bottom:16px">
   <div class="chart-card-head"><div><h3>모니터링 대상 플랫폼</h3><div class="unit">인플루언서 공동구매(공구)가 활발히 진행되는 6개 채널이에요. 여기서 인기 셀러·제품을 확인한 뒤 위 표에 기록하세요.</div></div></div>
   <div class="platform-grid" style="margin-top:10px">
     {% for p in platform_links %}
-    <a class="platform-card" href="{{ p.url }}" target="_blank" rel="noopener"><b>{{ p.name }}</b><span>{{ p.desc }}</span></a>
+    <a class="platform-card" href="{{ p.url }}" target="_blank" rel="noopener"><b>{{ p.name }}{% if p.auto %} <span style="font-size:10px;font-weight:600;color:var(--up)">⚡자동</span>{% endif %}</b><span>{{ p.desc }}</span></a>
     {% endfor %}
   </div>
 </div>
@@ -29,7 +29,11 @@
 <div class="chart-card" style="margin-bottom:16px">
   <div class="chart-card-head" style="align-items:center">
     <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>인기 셀러 등록</h3></div>
-    <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 등록</summary>
+    <div style="display:flex;gap:8px;align-items:center">
+      <form method="post" action="{{ url_for('trend.refresh') }}">
+        <button class="refresh-btn" type="submit" title="82market · 지금하는공구 · 공구모아를 지금 다시 읽어와서 자동 등록해요 (몇 초~30초 정도 걸려요)">⚡ 자동 생성</button>
+      </form>
+      <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 등록</summary>
       <form method="post" action="{{ url_for('trend.add') }}" class="ins-form-grid" style="margin-top:12px">
         <label>확인일<input name="check_date" type="date"></label>
         <label>외부몰<select name="platform">{% for p in platforms %}<option>{{ p }}</option>{% endfor %}</select></label>
@@ -40,7 +44,8 @@
         <label class="ins-wide">링크<input name="link" placeholder="https://..."></label>
         <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">등록</button></div>
       </form>
-    </details>
+      </details>
+    </div>
   </div>
   <div class="chart-svg-wrap">
     <table class="data-table">
