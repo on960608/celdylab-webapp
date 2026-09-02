@@ -225,15 +225,21 @@ def fetch_09more(limit=20):
     for date_str in soup.find_all(string=_DATE_RE):
         node = date_str.parent
         card = None
-        for _ in range(6):
+        # 상품명은 셀러/가격/마감일/카테고리보다 한 단계 더 바깥쪽 태그에 있어요.
+        # 그래서 조건을 만족하는 첫 조상에서 멈추지 않고, "형제 카드까지 합쳐지기
+        # 직전"까지 계속 올라가면서 매번 갱신해요 — 그래야 상품명이 포함된, 그 카드의
+        # 진짜 바깥 경계를 찾을 수 있어요.
+        for _ in range(8):
             if node is None:
                 break
             texts = [t for t in _leaf_texts(node) if t]
+            date_count = sum(1 for t in texts if _DATE_RE.match(t))
             has_price = any(_DIGITS_RE.match(t) and len(t.replace(",", "")) >= 3 for t in texts)
-            has_date = any(_DATE_RE.match(t) for t in texts)
-            if has_price and has_date and 3 <= len(texts) <= 10:
-                card = node
+            if date_count > 1:
+                # 마감일이 두 개 이상 보이면 옆 카드까지 합쳐진 거예요 — 그 전 단계가 정답.
                 break
+            if has_price and date_count == 1 and 3 <= len(texts) <= 8:
+                card = node
             node = node.parent
         if card is None:
             continue
