@@ -52,12 +52,9 @@
         <a href="https://commentpicker.com/export-comments-instagram.php" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none;font-size:12px;padding:7px 12px;background:transparent">Comment Picker에서 뽑기 ↗</a>
         <span style="font-size:11px;color:var(--muted2);width:100%">게시물 링크를 붙여넣고 CSV로 내려받은 뒤, 아래 업로드칸에 그대로 올려주세요. (셀디랩이 만든 도구가 아니라 외부 서비스예요 — 이용 전 각 사이트의 개인정보 처리방침을 확인해 주세요)</span>
       </div>
-      <div style="display:flex;align-items:center;gap:14px;padding:14px;border:1.5px dashed var(--line2);border-radius:12px;background:var(--panel-soft);margin:10px 0 0">
-        <div style="flex:1">
-          <b style="display:block;font-size:13px">엑셀(.xlsx) 또는 CSV 파일 업로드</b>
-          <small style="color:var(--muted2)">1,000명이 넘는 대량 댓글은 이 방식을 권장해요. 첫 줄은 "아이디", "댓글" 같은 열 제목으로 만들어 주세요.</small>
-        </div>
-        <input type="file" name="comments_file" id="commentsFile" accept=".csv,.xlsx">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 0">
+        <input type="file" name="comments_file" id="commentsFile" accept=".csv,.xlsx" style="max-width:220px">
+        <small style="color:var(--muted2)">엑셀(.xlsx)/CSV — 첫 줄은 "아이디","댓글" 열 제목으로 만들어 주세요.</small>
       </div>
       <small style="color:var(--muted2)">— 또는 아래에 "아이디: 댓글내용" 형식으로 한 줄씩 직접 붙여넣기 (파일을 올리면 이 텍스트는 무시돼요) —</small>
       <textarea name="comments_raw" id="commentsRaw" rows="8" placeholder="minji_life: 구매완료했어요!&#10;seller_2024: 예쁘네요&#10;minji_life: 인증 사진 올렸습니다"></textarea>
@@ -106,6 +103,7 @@
   </div>
   <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
     <button class="refresh-btn" type="button" id="copyBtn" data-usernames="{{ result.winners|map(attribute='username')|join(', ') }}">결과 복사</button>
+    <a class="refresh-btn" style="text-decoration:none" href="{{ url_for('giveaway.export', event_id=result.id) }}">⬇ 엑셀 다운로드</a>
     <span id="copyStatus" class="note" style="margin:0"></span>
   </div>
 </div>
@@ -115,7 +113,7 @@
   <div class="chart-card-head"><div><h3>추첨 기록</h3><div class="unit">지난 추첨 결과가 자동으로 기록돼요.</div></div></div>
   <div class="chart-svg-wrap">
     <table class="data-table">
-      <thead><tr><th>일시</th><th>게시물</th><th>유형</th><th>당첨 인원</th><th>최종 대상</th><th>관련 브랜드</th><th></th></tr></thead>
+      <thead><tr><th>일시</th><th>게시물</th><th>유형</th><th>당첨 인원</th><th>최종 대상</th><th>관련 브랜드</th><th></th><th></th></tr></thead>
       <tbody>
         {% for e in events %}
         <tr>
@@ -125,10 +123,11 @@
           <td>{{ e.winner_count }}명</td>
           <td>{{ e.final_pool_count }}명</td>
           <td>{{ e.related_brand or '-' }}</td>
+          <td><a href="{{ url_for('giveaway.export', event_id=e.id) }}">⬇ 엑셀</a></td>
           <td><form method="post" action="{{ url_for('giveaway.delete', event_id=e.id) }}" onsubmit="return confirm('이 기록을 삭제할까요?')"><button class="ins-del-btn" type="submit">삭제</button></form></td>
         </tr>
         {% else %}
-        <tr><td colspan="7" style="text-align:center;color:var(--muted2);padding:20px 0">추첨 기록이 없습니다.</td></tr>
+        <tr><td colspan="8" style="text-align:center;color:var(--muted2);padding:20px 0">추첨 기록이 없습니다.</td></tr>
         {% endfor %}
       </tbody>
     </table>
