@@ -132,6 +132,33 @@ def clear():
     return redirect(url_for("trend.index"))
 
 
+@trend_bp.route("/refresh", methods=["POST"])
+def refresh():
+    """'생성' 버튼 — 82market·지금하는공구·공구모아(09more.com)를 지금 이 순간 다시 읽어와서
+    현재 진행중인 인기 셀러·상품을 자동으로 등록해요. 눌러서 나온 데이터를 그대로 쌓아두면
+    다음에 또 눌렀을 때 '그 시점 이후의' 흐름을 인기 셀러 분석에서 확인할 수 있어요."""
+    import trend_scraper
+
+    summaries = []
+    total = 0
+    for label, fn in trend_scraper.SCRAPERS:
+        try:
+            records = fn(limit=20)
+        except Exception as e:
+            summaries.append(f"{label} 실패({e.__class__.__name__})")
+            continue
+        for r in records:
+            db.create_trend_record(r, "auto-refresh")
+        total += len(records)
+        summaries.append(f"{label} {len(records)}건")
+
+    if total:
+        flash("자동 생성 완료 — " + " · ".join(summaries) + f" (총 {total}건)")
+    else:
+        flash("자동 생성 실패 — " + " · ".join(summaries) if summaries else "자동 생성에 실패했어요.")
+    return redirect(url_for("trend.index"))
+
+
 # ---------------------------------------------------------------------------
 # 외부 자동화(Cowork 예약작업 등)가 호출하는 API
 #

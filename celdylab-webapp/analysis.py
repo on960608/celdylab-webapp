@@ -9,13 +9,18 @@ TREND_PLATFORMS = ["캘린", "82market", "위시버니", "지금하는공구", "
 TREND_CATEGORIES = ["리빙", "여행", "홈인테리어", "패션잡화", "주방용품", "생활용품", "기타"]
 
 # 인플루언서 공동구매(공구)가 활발히 진행되는 모니터링 대상 플랫폼
+# auto=True 인 3개(82market·지금하는공구·공구모아)는 트렌드 분석 페이지의 '생성' 버튼으로
+# 자동 수집돼요 (trend_scraper.py 참고). 나머지 3개는 화면 구조상 자동 수집이 어려워서
+# 지금처럼 바로가기 링크로 직접 확인 후 수동 등록해야 해요.
+# 공구모아는 원래 gonggumoa.com이었지만 그 사이트는 자바스크립트로만 목록을 불러와
+# 자동화가 불가능해서, 같은 이름을 쓰는 09more.com(자동 수집 가능)으로 대체했어요.
 TREND_PLATFORM_LINKS = [
-    {"name": "캘린 (Calen)", "url": "https://www.calen.co.kr/", "desc": "인플루언서 공동구매"},
-    {"name": "82market", "url": "https://www.82market.com/", "desc": "인플루언서 공구 마켓"},
-    {"name": "위시버니 (드랍)", "url": "https://www.wishbunny.me/drop", "desc": "공구 일정·알림"},
-    {"name": "지금하는공구", "url": "https://www.09now.com/", "desc": "인스타 공구 검색엔진"},
-    {"name": "인공 (IN gong)", "url": "https://insta-gong.com/category/kitchen-clean", "desc": "주방/청소 특화 인스타 공구 모음"},
-    {"name": "공구모아", "url": "https://gonggumoa.com/", "desc": "공구 일정·인기 공구 통합 모음"},
+    {"name": "캘린 (Calen)", "url": "https://www.calen.co.kr/", "desc": "인플루언서 공동구매", "auto": False},
+    {"name": "82market", "url": "https://www.82market.com/", "desc": "인플루언서 공구 마켓", "auto": True},
+    {"name": "위시버니 (드랍)", "url": "https://www.wishbunny.me/drop", "desc": "공구 일정·알림", "auto": False},
+    {"name": "지금하는공구", "url": "https://www.09now.com/", "desc": "인스타 공구 검색엔진", "auto": True},
+    {"name": "인공 (IN gong)", "url": "https://insta-gong.com/category/kitchen-clean", "desc": "주방/청소 특화 인스타 공구 모음", "auto": False},
+    {"name": "공구모아", "url": "https://www.09more.com/", "desc": "SNS 공동구매 정보 통합 모음", "auto": True},
 ]
 
 
