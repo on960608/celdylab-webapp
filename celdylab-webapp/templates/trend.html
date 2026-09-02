@@ -7,6 +7,15 @@
   <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아)에서 확인한 인기 셀러·제품을 기록하면, 인기 셀러 분석과 카테고리별 인사이트가 자동으로 집계돼요.</p>
 </div>
 
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>모니터링 대상 플랫폼</h3><div class="unit">인플루언서 공동구매(공구)가 활발히 진행되는 6개 채널이에요. 여기서 인기 셀러·제품을 확인한 뒤 위 표에 기록하세요.</div></div></div>
+  <div class="platform-grid" style="margin-top:10px">
+    {% for p in platform_links %}
+    <a class="platform-card" href="{{ p.url }}" target="_blank" rel="noopener"><b>{{ p.name }}</b><span>{{ p.desc }}</span></a>
+    {% endfor %}
+  </div>
+</div>
+
 {% if api_key_configured %}
   <div class="chart-card" style="margin-bottom:16px;background:rgba(31,157,99,.08);border-color:rgba(31,157,99,.3)">
     <p class="note" style="margin:0;color:var(--up)">✓ 외부 자동화(Cowork 예약작업 등) 연동이 켜져 있어요. <code>/trend/api/records</code>로 데이터를 자동 전송받을 수 있어요.</p>

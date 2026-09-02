@@ -17,14 +17,14 @@
 
     <div class="nav-label">시딩</div>
     <nav class="nav-group">
-      <a class="nav-link soon" href="{{ url_for('seeding') }}">시딩 업무 가이드<span class="soon-tag">준비중</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint == 'seeding' else '' }}" href="{{ url_for('seeding') }}">시딩 업무 가이드</a>
       <a class="nav-link {{ 'active' if request.endpoint == 'insight.index' else '' }}" href="{{ url_for('insight.index') }}">시딩 인사이트 분석</a>
       <a class="nav-link {{ 'active' if request.endpoint == 'listup.index' else '' }}" href="{{ url_for('listup.index') }}">협찬 인원 리스트업</a>
     </nav>
 
     <div class="nav-label">공구</div>
     <nav class="nav-group">
-      <a class="nav-link soon" href="{{ url_for('gonggu') }}">공구 업무 가이드<span class="soon-tag">준비중</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint == 'gonggu' else '' }}" href="{{ url_for('gonggu') }}">공구 업무 가이드</a>
       <a class="nav-link {{ 'active' if request.endpoint == 'gongu.index' else '' }}" href="{{ url_for('gongu.index') }}">공구 성과 분석</a>
       <a class="nav-link {{ 'active' if request.endpoint == 'archive' else '' }}" href="{{ url_for('archive') }}">자료실</a>
     </nav>

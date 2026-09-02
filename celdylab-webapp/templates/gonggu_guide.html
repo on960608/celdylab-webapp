@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}공구 업무 가이드 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">GUIDE · GROUP BUY</div>
+  <h2>공구 업무 가이드</h2>
+  <p>브랜드 소싱부터 라이브 운영, 정산까지 — 공동구매 한 회차가 굴러가는 6단계입니다. 실제 매출·판매량·반품율 기록과 신규 공구 예상 계산기는 <a href="{{ url_for('gongu.index') }}" style="color:var(--accent-deep);font-weight:700">공구 성과 분석</a> 페이지에서 진행하세요.</p>
+</div>
+
+<div class="steps">
+  <div class="step"><div class="badge">STEP 01</div><h3>브랜드 · 상품 소싱</h3><p>카테고리 트렌드와 팔로워 반응을 참고해 상품 후보 선정</p></div>
+  <div class="step"><div class="badge">STEP 02</div><h3>조건 협의</h3><p>단가, 혜택, 물량, 진행 일정을 브랜드와 조율</p></div>
+  <div class="step"><div class="badge">STEP 03</div><h3>상세페이지 · 혜택 세팅</h3><p>구매 링크, 할인 코드, 사은품 등 구성 확정</p></div>
+  <div class="step"><div class="badge">STEP 04</div><h3>오픈 일정 공지</h3><p>사전 알림 콘텐츠 및 채널 공지로 오픈 예고</p></div>
+  <div class="step"><div class="badge">STEP 05</div><h3>라이브 운영</h3><p>실시간 CS 대응, 재고·주문 현황 체크</p></div>
+  <div class="step"><div class="badge">STEP 06</div><h3>정산 &amp; 마감 리포트</h3><p>매출·정산 확정 후 회차 성과 리포트 작성</p></div>
+</div>
+
+<div class="doc-block" style="margin-top:16px">
+  <h3>단계별 체크 포인트</h3>
+  <ul>
+    <li><b>브랜드·상품 소싱</b> — 외부몰 트렌드 분석에서 확인한 인기 카테고리·셀러 사례를 함께 참고하세요.</li>
+    <li><b>조건 협의</b> — 팔로워·평균 조회수 대비 시장 단가 범위를 먼저 확인한 뒤 제안하고, 원고료 대신 제품+수수료 조건도 함께 안내하면 협의가 수월해요.</li>
+    <li><b>오픈 일정 공지</b> — 사전 알림 콘텐츠 업로드 링크는 완료 즉시 컨택 리스트/인사이트 분석에 기록해 두세요.</li>
+    <li><b>라이브 운영</b> — CS 응대 중 발생한 이슈나 재고 소진 시점은 정산 리포트 작성 시 참고할 수 있도록 별도로 메모해 두는 걸 추천해요.</li>
+    <li><b>정산 &amp; 마감 리포트</b> — 매출·판매량·반품 수량이 확정되면 <a href="{{ url_for('gongu.index') }}" style="color:var(--accent-deep);font-weight:700">공구 성과 분석</a>에 바로 등록하세요. 셀러별·팔로워 구간별 자동 집계와 반품율 위험도 배지가 반영됩니다.</li>
+  </ul>
+</div>
+{% endblock %}
