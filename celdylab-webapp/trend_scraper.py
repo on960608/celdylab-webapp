@@ -217,6 +217,11 @@ _09MORE_CATEGORY_MAP = {
     "여행": "여행",
 }
 
+# 요청에 따라 이 원본 카테고리(사이트에 표시된 그대로의 값)에 해당하는 상품은
+# 아예 등록하지 않아요. "뷰티"는 매핑표에 없어서 원래 "기타"로 뭉뚱그려졌지만,
+# 걸러내려면 매핑 전 원본 값 기준으로 판단해야 해요.
+_09MORE_EXCLUDED_RAW_CATEGORIES = {"여행", "뷰티"}
+
 
 def _map_09more_category(raw):
     return _09MORE_CATEGORY_MAP.get(raw, "기타")
@@ -272,7 +277,10 @@ def fetch_09more(limit=20):
         # 앞의 둘은 항상 [상품명, 셀러명] 순서였어요. 카테고리는 맨 마지막 값을 쓰는 게
         # (중간에 예상 못 한 배지 텍스트가 하나 더 끼어들어도) 더 안전해요.
         product, seller = rest[0], rest[1]
-        category = _map_09more_category(rest[-1]) if len(rest) > 2 else "기타"
+        raw_category = rest[-1] if len(rest) > 2 else None
+        if raw_category in _09MORE_EXCLUDED_RAW_CATEGORIES:
+            continue
+        category = _map_09more_category(raw_category) if raw_category else "기타"
 
         key = (product, seller)
         if key in seen:
