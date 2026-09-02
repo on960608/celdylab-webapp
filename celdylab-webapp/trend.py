@@ -3,7 +3,7 @@ import os
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
 
 import db
-from analysis import TREND_PLATFORMS, TREND_CATEGORIES
+from analysis import TREND_PLATFORMS, TREND_CATEGORIES, TREND_PLATFORM_LINKS
 
 trend_bp = Blueprint("trend", __name__, url_prefix="/trend")
 
@@ -92,7 +92,7 @@ def index():
 
     return render_template(
         "trend.html",
-        platforms=TREND_PLATFORMS, categories=TREND_CATEGORIES,
+        platforms=TREND_PLATFORMS, categories=TREND_CATEGORIES, platform_links=TREND_PLATFORM_LINKS,
         records=records, popular_sellers=popular_sellers, category_insights=category_insights,
         api_key_configured=bool(os.environ.get("AUTOMATION_API_KEY")),
     )

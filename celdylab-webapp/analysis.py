@@ -8,6 +8,16 @@ BRANDS = ["코드니처", "빠이러스", "라이프스타일마트"]
 TREND_PLATFORMS = ["캘린", "82market", "위시버니", "지금하는공구", "인공", "공구모아"]
 TREND_CATEGORIES = ["리빙", "여행", "홈인테리어", "패션잡화", "주방용품", "생활용품", "기타"]
 
+# 인플루언서 공동구매(공구)가 활발히 진행되는 모니터링 대상 플랫폼
+TREND_PLATFORM_LINKS = [
+    {"name": "캘린 (Calen)", "url": "https://www.calen.co.kr/", "desc": "인플루언서 공동구매"},
+    {"name": "82market", "url": "https://www.82market.com/", "desc": "인플루언서 공구 마켓"},
+    {"name": "위시버니 (드랍)", "url": "https://www.wishbunny.me/drop", "desc": "공구 일정·알림"},
+    {"name": "지금하는공구", "url": "https://www.09now.com/", "desc": "인스타 공구 검색엔진"},
+    {"name": "인공 (IN gong)", "url": "https://insta-gong.com/category/kitchen-clean", "desc": "주방/청소 특화 인스타 공구 모음"},
+    {"name": "공구모아", "url": "https://gonggumoa.com/", "desc": "공구 일정·인기 공구 통합 모음"},
+]
+
 
 # ---------------------------------------------------------------------------
 # 시딩 인사이트

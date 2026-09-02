@@ -168,19 +168,19 @@ app.register_blueprint(giveaway_bp)
 
 
 # ---------------------------------------------------------------------------
-# 아직 콘텐츠를 채우지 못한 가이드 페이지 (STEP 텍스트·스크린샷은 다음 단계에서 이식 예정)
+# 시딩 / 공구 업무 가이드 — STEP 텍스트·스크린샷 (예전 오프라인 트래커에서 이식)
 # ---------------------------------------------------------------------------
 
 @app.route("/seeding")
 @login_required
 def seeding():
-    return render_template("coming_soon.html", title="시딩 업무 가이드")
+    return render_template("seeding.html")
 
 
 @app.route("/gonggu")
 @login_required
 def gonggu():
-    return render_template("coming_soon.html", title="공구 업무 가이드")
+    return render_template("gonggu_guide.html")
 
 
 if __name__ == "__main__":
