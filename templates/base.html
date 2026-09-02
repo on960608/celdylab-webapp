@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}셀디랩 콘텐츠팀 웹앱{% endblock %}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" aria-label="카테고리">
+    <div class="sidebar-brand">
+      <div class="logo">S</div>
+      <div><b>셀디랩 콘텐츠팀</b><small>시딩·공구 웹앱 · v1</small></div>
+    </div>
+
+    <div class="nav-label">시딩</div>
+    <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint == 'seeding' else '' }}" href="{{ url_for('seeding') }}">시딩 업무 가이드</a>
+      <a class="nav-link {{ 'active' if request.endpoint == 'insight.index' else '' }}" href="{{ url_for('insight.index') }}">시딩 인사이트 분석</a>
+      <a class="nav-link {{ 'active' if request.endpoint == 'listup.index' else '' }}" href="{{ url_for('listup.index') }}">협찬 인원 리스트업</a>
+    </nav>
+
+    <div class="nav-label">공구</div>
+    <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint == 'gonggu' else '' }}" href="{{ url_for('gonggu') }}">공구 업무 가이드</a>
+      <a class="nav-link {{ 'active' if request.endpoint == 'gongu.index' else '' }}" href="{{ url_for('gongu.index') }}">공구 성과 분석</a>
+      <a class="nav-link {{ 'active' if request.endpoint == 'archive' else '' }}" href="{{ url_for('archive') }}">자료실</a>
+    </nav>
+
+    <div class="nav-label">분석</div>
+    <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint == 'trend.index' else '' }}" href="{{ url_for('trend.index') }}">외부몰 트렌드 분석</a>
+    </nav>
+
+    <div class="nav-label">댓글 이벤트 추첨</div>
+    <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint == 'giveaway.index' else '' }}" href="{{ url_for('giveaway.index') }}">댓글 이벤트 추첨</a>
+    </nav>
+
+    <div class="nav-label">설정</div>
+    <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint == 'employees' else '' }}" href="{{ url_for('employees') }}">직원 계정 관리</a>
+    </nav>
+
+    <div class="sidebar-foot">
+      {% if current_user_name %}
+        <span>{{ current_user_name }}님</span>
+        <a href="{{ url_for('logout') }}">로그아웃</a>
+      {% endif %}
+    </div>
+  </aside>
+
+  <div class="main-scroll">
+    <div class="page-pad">
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flash-list">
+            {% for m in messages %}<li>{{ m }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+</body>
+</html>
