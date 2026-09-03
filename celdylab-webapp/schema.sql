@@ -118,6 +118,25 @@ CREATE TABLE IF NOT EXISTS trend_records (
 );
 
 -- ---------------------------------------------------------------------------
+-- 외부몰 트렌드 분석 — 이커머스 마켓플레이스 베스트셀러 (G마켓 등, 카테고리별 순위 스냅샷)
+-- 새로고침/자동 수집할 때마다 (platform, category) 조합의 기존 데이터를 지우고 그
+-- 순간의 순위로 통째로 교체해요 — trend_records의 자동 수집분과 같은 방식이에요.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS marketplace_best_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',
+  rank INTEGER NOT NULL DEFAULT 0,
+  product TEXT NOT NULL DEFAULT '',
+  original_price INTEGER,
+  discount_pct INTEGER,
+  sale_price INTEGER,
+  link TEXT NOT NULL DEFAULT '',
+  collected_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_marketplace_best_items_category ON marketplace_best_items(category, rank);
+
+-- ---------------------------------------------------------------------------
 -- 댓글 이벤트 추첨
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS giveaway_events (
