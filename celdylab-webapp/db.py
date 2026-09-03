@@ -376,6 +376,49 @@ def latest_auto_trend_refresh_at():
     return row["latest"] if row else None
 
 
+# ---------- 외부몰 트렌드 분석 — 이커머스 마켓플레이스 베스트셀러 ----------
+
+def replace_marketplace_best_items(platform, category, items):
+    """(platform, category) 조합의 기존 순위 데이터를 지우고, 지금 막 읽어온 순위로
+    통째로 교체해요. items는 {rank, product, original_price, discount_pct, sale_price, link} 목록."""
+    conn = get_conn()
+    now = now_iso()
+    conn.execute(
+        "DELETE FROM marketplace_best_items WHERE platform = ? AND category = ?",
+        (platform, category),
+    )
+    if items:
+        conn.executemany(
+            """INSERT INTO marketplace_best_items
+               (platform, category, rank, product, original_price, discount_pct, sale_price, link, collected_at)
+               VALUES (:platform, :category, :rank, :product, :original_price, :discount_pct, :sale_price, :link, :collected_at)""",
+            [{**it, "platform": platform, "category": category, "collected_at": now} for it in items],
+        )
+    conn.commit()
+    conn.close()
+
+
+def list_marketplace_best_items(category=None):
+    conn = get_conn()
+    if category:
+        rows = conn.execute(
+            "SELECT * FROM marketplace_best_items WHERE category = ? ORDER BY rank ASC", (category,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM marketplace_best_items ORDER BY category, rank ASC").fetchall()
+    conn.close()
+    return rows
+
+
+def latest_marketplace_collected_at():
+    """가장 최근 마켓플레이스 베스트셀러 수집이 언제 있었는지(UTC ISO 문자열) 돌려줘요.
+    한 번도 없었으면 None이에요."""
+    conn = get_conn()
+    row = conn.execute("SELECT MAX(collected_at) AS latest FROM marketplace_best_items").fetchone()
+    conn.close()
+    return row["latest"] if row else None
+
+
 # ---------- 댓글 이벤트 추첨 ----------
 
 def create_giveaway_event(data, winners, created_by):
