@@ -4,105 +4,179 @@
 <div class="block-head">
   <div class="eyebrow">ANALYSIS · EXTERNAL MALL TREND</div>
   <h2>외부몰 트렌드 분석</h2>
-  <p>5개 공구 앱(82market·지금하는공구·공구모아·공구팡팡·맘캘린더)에서 확인한 인기 셀러·제품을 기록하면, 인기 셀러 분석과 카테고리별 인사이트가 자동으로 집계돼요. 이 페이지를 새로고침할 때마다 자동으로 다시 수집해서 최신 상태로 바뀌어요(이전 자동 데이터는 새 데이터로 교체되고, 직접 등록한 기록은 그대로 남아요). 지금 바로 갱신하고 싶으면 아래 "⚡ 자동 생성" 버튼을 눌러도 돼요.</p>
+  <p>공구 앱에서 확인한 인기 셀러·제품과, 이커머스 마켓플레이스의 카테고리별 베스트셀러 순위를 한 곳에서 확인해요. 두 탭 모두 페이지를 새로고침할 때마다 자동으로 최신 상태로 갱신돼요.</p>
 </div>
 
-<div class="chart-card" style="margin-bottom:16px">
-  <div class="chart-card-head"><div><h3>모니터링 대상 플랫폼</h3><div class="unit">인플루언서 공동구매(공구)가 활발히 진행되는 5개 채널이에요. 모두 자동으로 수집되지만, 필요하면 직접 들어가서 확인할 수도 있어요.</div></div></div>
-  <div class="platform-grid" style="margin-top:10px">
-    {% for p in platform_links %}
-    <a class="platform-card" href="{{ p.url }}" target="_blank" rel="noopener"><b>{{ p.name }}{% if p.auto %} <span style="font-size:10px;font-weight:600;color:var(--up)">⚡자동</span>{% endif %}</b><span>{{ p.desc }}</span></a>
-    {% endfor %}
+<div class="guide-tabs-wrap">
+  <div class="subtab-bar" role="tablist" aria-label="외부몰 트렌드 분석 탭">
+    <button class="subtab active" type="button" data-step="gonggu">공구 셀러 트렌드</button>
+    <button class="subtab" type="button" data-step="marketplace">마켓플레이스 베스트셀러</button>
   </div>
-</div>
 
-{% if api_key_configured %}
-  <div class="chart-card" style="margin-bottom:16px;background:rgba(31,157,99,.08);border-color:rgba(31,157,99,.3)">
-    <p class="note" style="margin:0;color:var(--up)">✓ 외부 자동화(Cowork 예약작업 등) 연동이 켜져 있어요. <code>/trend/api/records</code>로 데이터를 자동 전송받을 수 있어요.</p>
-  </div>
-{% else %}
-  <div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
-    <p class="note" style="margin:0">⚠ 외부 자동화 연동이 아직 꺼져 있어요 (지금은 아래에서 직접 등록만 가능). <code>AUTOMATION_API_KEY</code> 환경변수를 등록하면 Cowork 예약작업 같은 외부 프로세스가 <code>/trend/api/records</code>를 호출해서 자동으로 데이터를 채워 넣을 수 있어요.</p>
-  </div>
-{% endif %}
+  <div class="step-guide active" data-step="gonggu">
+    <p class="note" style="margin:0 0 14px">5개 공구 앱(82market·지금하는공구·공구모아·공구팡팡·맘캘린더)에서 확인한 인기 셀러·제품을 기록하면, 인기 셀러 분석과 카테고리별 인사이트가 자동으로 집계돼요. 이전 자동 데이터는 새 데이터로 교체되고, 직접 등록한 기록은 그대로 남아요. 지금 바로 갱신하고 싶으면 아래 "⚡ 자동 생성" 버튼을 눌러도 돼요.</p>
 
-<div class="chart-card" style="margin-bottom:16px">
-  <div class="chart-card-head" style="align-items:center">
-    <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>인기 셀러 등록</h3></div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <form method="post" action="{{ url_for('trend.refresh') }}">
-        <button class="refresh-btn" type="submit" title="82market · 지금하는공구 · 공구모아 · 공구팡팡 · 맘캘린더를 지금 이 순간 다시 읽어와서 이전 자동 데이터를 새 데이터로 바로 교체해요 (몇 초~30초 정도 걸려요). 참고: 새로고침만 해도 5분에 한 번은 자동으로 갱신돼요.">⚡ 자동 생성</button>
-      </form>
-      <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 등록</summary>
-      <form method="post" action="{{ url_for('trend.add') }}" class="ins-form-grid" style="margin-top:12px">
-        <label>확인일<input name="check_date" type="date"></label>
-        <label>외부몰<select name="platform">{% for p in platforms %}<option>{{ p }}</option>{% endfor %}</select></label>
-        <label>셀러<input name="seller" placeholder="셀러명"></label>
-        <label>제품<input name="product" placeholder="제품명"></label>
-        <label>카테고리<select name="category">{% for c in categories %}<option>{{ c }}</option>{% endfor %}</select></label>
-        <label>공구가(원)<input name="price" type="number" min="0" placeholder="0"></label>
-        <label class="ins-wide">링크<input name="link" placeholder="https://..."></label>
-        <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">등록</button></div>
-      </form>
-      </details>
-    </div>
-  </div>
-  <div class="chart-svg-wrap">
-    <table class="data-table">
-      <thead><tr><th>확인일</th><th>외부몰</th><th>셀러</th><th>제품</th><th>카테고리</th><th>공구가</th><th>링크</th><th></th></tr></thead>
-      <tbody>
-        {% for r in records %}
-        <tr>
-          <td>{{ r.check_date or '-' }}</td><td>{{ r.platform or '-' }}</td><td>{{ r.seller or '-' }}</td>
-          <td>{{ r.product or '-' }}</td><td>{{ r.category or '-' }}</td>
-          <td>{{ '{:,}'.format(r.price) + '원' if r.price else '-' }}</td>
-          <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
-          <td><form method="post" action="{{ url_for('trend.delete', record_id=r.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="8" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 셀러가 없습니다.</td></tr>
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-card-head"><div><h3>모니터링 대상 플랫폼</h3><div class="unit">인플루언서 공동구매(공구)가 활발히 진행되는 5개 채널이에요. 모두 자동으로 수집되지만, 필요하면 직접 들어가서 확인할 수도 있어요.</div></div></div>
+      <div class="platform-grid" style="margin-top:10px">
+        {% for p in platform_links %}
+        <a class="platform-card" href="{{ p.url }}" target="_blank" rel="noopener"><b>{{ p.name }}{% if p.auto %} <span style="font-size:10px;font-weight:600;color:var(--up)">⚡자동</span>{% endif %}</b><span>{{ p.desc }}</span></a>
         {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <p class="note" style="margin-top:12px"><form method="post" action="{{ url_for('trend.clear') }}" onsubmit="return confirm('전체 삭제할까요?')"><button class="refresh-btn" type="submit">전체 초기화</button></form></p>
-</div>
+      </div>
+    </div>
 
-<div class="chart-card" style="margin-bottom:16px">
-  <div class="chart-card-head"><div><h3>인기 셀러 분석</h3><div class="unit">등록된 셀러 데이터를 셀러별로 묶어 등록 횟수·확인된 플랫폼 수·평균 공구가 순으로 나열해요.</div></div></div>
-  <div class="top10-list">
-    {% for s in popular_sellers %}
-      <div class="top10-row">
-        <span class="top10-rank">{{ loop.index }}</span>
-        <div class="top10-info">
-          <div class="top10-name">{{ s.seller }}</div>
-          <div class="top10-sub">{{ s.category }} · {{ s.platform_count }}개 플랫폼에서 확인</div>
-        </div>
-        <div class="top10-meta">
-          <span class="top10-metric rank">{{ s.count }}회 등록</span>
-          <span class="top10-metric" style="font-weight:600;font-size:11px;color:var(--muted)">{{ '{:,}'.format(s.avg_price|round|int) + '원' if s.avg_price is not none else '가격 정보 없음' }}</span>
-          {% if s.link %}<a href="{{ s.link }}" target="_blank" rel="noopener">열기 ↗</a>{% endif %}
-        </div>
+    {% if api_key_configured %}
+      <div class="chart-card" style="margin-bottom:16px;background:rgba(31,157,99,.08);border-color:rgba(31,157,99,.3)">
+        <p class="note" style="margin:0;color:var(--up)">✓ 외부 자동화(Cowork 예약작업 등) 연동이 켜져 있어요. <code>/trend/api/records</code>로 데이터를 자동 전송받을 수 있어요.</p>
       </div>
     {% else %}
-      <p class="note" style="margin:0">셀러를 등록하면 인기 셀러 분석이 여기에 나열됩니다.</p>
+      <div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+        <p class="note" style="margin:0">⚠ 외부 자동화 연동이 아직 꺼져 있어요 (지금은 아래에서 직접 등록만 가능). <code>AUTOMATION_API_KEY</code> 환경변수를 등록하면 Cowork 예약작업 같은 외부 프로세스가 <code>/trend/api/records</code>를 호출해서 자동으로 데이터를 채워 넣을 수 있어요.</p>
+      </div>
+    {% endif %}
+
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-card-head" style="align-items:center">
+        <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>인기 셀러 등록</h3></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <form method="post" action="{{ url_for('trend.refresh') }}">
+            <button class="refresh-btn" type="submit" title="82market · 지금하는공구 · 공구모아 · 공구팡팡 · 맘캘린더를 지금 이 순간 다시 읽어와서 이전 자동 데이터를 새 데이터로 바로 교체해요 (몇 초~30초 정도 걸려요). 참고: 새로고침만 해도 5분에 한 번은 자동으로 갱신돼요.">⚡ 자동 생성</button>
+          </form>
+          <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 등록</summary>
+          <form method="post" action="{{ url_for('trend.add') }}" class="ins-form-grid" style="margin-top:12px">
+            <label>확인일<input name="check_date" type="date"></label>
+            <label>외부몰<select name="platform">{% for p in platforms %}<option>{{ p }}</option>{% endfor %}</select></label>
+            <label>셀러<input name="seller" placeholder="셀러명"></label>
+            <label>제품<input name="product" placeholder="제품명"></label>
+            <label>카테고리<select name="category">{% for c in categories %}<option>{{ c }}</option>{% endfor %}</select></label>
+            <label>공구가(원)<input name="price" type="number" min="0" placeholder="0"></label>
+            <label class="ins-wide">링크<input name="link" placeholder="https://..."></label>
+            <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">등록</button></div>
+          </form>
+          </details>
+        </div>
+      </div>
+      <div class="chart-svg-wrap">
+        <table class="data-table">
+          <thead><tr><th>확인일</th><th>외부몰</th><th>셀러</th><th>제품</th><th>카테고리</th><th>공구가</th><th>링크</th><th></th></tr></thead>
+          <tbody>
+            {% for r in records %}
+            <tr>
+              <td>{{ r.check_date or '-' }}</td><td>{{ r.platform or '-' }}</td><td>{{ r.seller or '-' }}</td>
+              <td>{{ r.product or '-' }}</td><td>{{ r.category or '-' }}</td>
+              <td>{{ '{:,}'.format(r.price) + '원' if r.price else '-' }}</td>
+              <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+              <td><form method="post" action="{{ url_for('trend.delete', record_id=r.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 셀러가 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="note" style="margin-top:12px"><form method="post" action="{{ url_for('trend.clear') }}" onsubmit="return confirm('전체 삭제할까요?')"><button class="refresh-btn" type="submit">전체 초기화</button></form></p>
+    </div>
+
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-card-head"><div><h3>인기 셀러 분석</h3><div class="unit">등록된 셀러 데이터를 셀러별로 묶어 등록 횟수·확인된 플랫폼 수·평균 공구가 순으로 나열해요.</div></div></div>
+      <div class="top10-list">
+        {% for s in popular_sellers %}
+          <div class="top10-row">
+            <span class="top10-rank">{{ loop.index }}</span>
+            <div class="top10-info">
+              <div class="top10-name">{{ s.seller }}</div>
+              <div class="top10-sub">{{ s.category }} · {{ s.platform_count }}개 플랫폼에서 확인</div>
+            </div>
+            <div class="top10-meta">
+              <span class="top10-metric rank">{{ s.count }}회 등록</span>
+              <span class="top10-metric" style="font-weight:600;font-size:11px;color:var(--muted)">{{ '{:,}'.format(s.avg_price|round|int) + '원' if s.avg_price is not none else '가격 정보 없음' }}</span>
+              {% if s.link %}<a href="{{ s.link }}" target="_blank" rel="noopener">열기 ↗</a>{% endif %}
+            </div>
+          </div>
+        {% else %}
+          <p class="note" style="margin:0">셀러를 등록하면 인기 셀러 분석이 여기에 나열됩니다.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-card-head"><div><h3>카테고리별 소구 인사이트</h3><div class="unit">등록된 인기 셀러 데이터를 카테고리 기준으로 총합·평균 집계한 결과예요.</div></div></div>
+      <div class="chart-svg-wrap">
+        <table class="data-table">
+          <thead><tr><th>카테고리</th><th>등록 건수</th><th>평균 공구가</th><th>확인된 플랫폼 수</th></tr></thead>
+          <tbody>
+            {% for c in category_insights %}
+            <tr><td>{{ c.category }}</td><td>{{ c.count }}건</td><td>{{ ('{:,}'.format(c.avg_price|round|int) + '원') if c.avg_price is not none else '-' }}</td><td>{{ c.platform_count }} / {{ platforms|length }}개</td></tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">인기 셀러를 등록하면 카테고리별 집계가 표시됩니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-guide" data-step="marketplace">
+    <div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+      <p class="note" style="margin:0">⚠ <b>G마켓 베스트만 자동 수집돼요.</b> 쿠팡·네이버 스마트스토어·11번가는 사이트가 우리를 막은 게 아니라, 자동화 도구 자체의 안전 정책 때문에 접속이 막혀 있어요 — 되는 것처럼 우회하지 않고 자동화 대상에서 뺐어요. 또한 쿠팡윙·네이버 커머스센터 등 로그인이 필요한 자사 상품의 노출·판매 데이터는 이 방식으로는 수집할 수 없어요(셀러센터 오픈 API 연동이 별도로 필요해요). 아래는 어디까지나 시장 전체의 베스트셀러 동향 참고용이에요.</p>
+    </div>
+
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-card-head" style="align-items:center">
+        <div><div class="eyebrow" style="margin-bottom:4px">G마켓 베스트</div><h3>카테고리별 베스트셀러</h3><div class="unit">셀디랩 판매 카테고리(청소·주방·구강제품·침구·생활용품)에 매칭되는 G마켓 베스트 카테고리의 상위 순위예요. {{ '마지막 갱신: ' + marketplace_collected_at[:16].replace('T',' ') + ' UTC' if marketplace_collected_at else '아직 수집된 데이터가 없어요.' }}</div></div>
+        <form method="post" action="{{ url_for('trend.marketplace_refresh') }}">
+          <button class="refresh-btn" type="submit" title="G마켓 베스트 5개 카테고리를 지금 이 순간 다시 읽어와서 이전 데이터를 새 순위로 바로 교체해요. 참고: 새로고침만 해도 5분에 한 번은 자동으로 갱신돼요.">⚡ 지금 다시 수집</button>
+        </form>
+      </div>
+    </div>
+
+    {% for cat in marketplace_categories %}
+      {% set stat = marketplace_stats[cat] %}
+      <div class="chart-card" style="margin-bottom:16px">
+        <div class="chart-card-head"><div><h3>{{ cat }}</h3><div class="unit">G마켓 베스트 상위 {{ stat.total_count }}개 중 {{ stat.shown|length }}개 표시</div></div></div>
+        <div class="stat-row" style="margin-bottom:12px">
+          <div class="stat-tile"><span class="label">수집된 순위</span><strong>{{ stat.total_count }}개</strong></div>
+          <div class="stat-tile"><span class="label">평균 판매가</span><strong>{{ ('{:,}'.format(stat.avg_price|round|int) + '원') if stat.avg_price is not none else '-' }}</strong></div>
+          <div class="stat-tile"><span class="label">최대 할인율</span><strong>{{ (stat.max_discount|string + '%') if stat.max_discount is not none else '-' }}</strong></div>
+        </div>
+        <div class="chart-svg-wrap">
+          <table class="data-table">
+            <thead><tr><th>순위</th><th>상품명</th><th>정가</th><th>할인율</th><th>판매가</th><th>링크</th></tr></thead>
+            <tbody>
+              {% for it in stat.shown %}
+              <tr>
+                <td>{{ it.rank }}</td>
+                <td>{{ it.product }}</td>
+                <td>{{ ('{:,}'.format(it.original_price) + '원') if it.original_price is not none else '-' }}</td>
+                <td>{{ (it.discount_pct|string + '%') if it.discount_pct is not none else '-' }}</td>
+                <td>{{ ('{:,}'.format(it.sale_price) + '원') if it.sale_price is not none else '-' }}</td>
+                <td>{% if it.link %}<a href="{{ it.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6" style="text-align:center;color:var(--muted2);padding:20px 0">아직 수집된 데이터가 없어요. 위 "⚡ 지금 다시 수집"을 눌러 보세요.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     {% endfor %}
   </div>
 </div>
 
-<div class="chart-card">
-  <div class="chart-card-head"><div><h3>카테고리별 소구 인사이트</h3><div class="unit">등록된 인기 셀러 데이터를 카테고리 기준으로 총합·평균 집계한 결과예요.</div></div></div>
-  <div class="chart-svg-wrap">
-    <table class="data-table">
-      <thead><tr><th>카테고리</th><th>등록 건수</th><th>평균 공구가</th><th>확인된 플랫폼 수</th></tr></thead>
-      <tbody>
-        {% for c in category_insights %}
-        <tr><td>{{ c.category }}</td><td>{{ c.count }}건</td><td>{{ ('{:,}'.format(c.avg_price|round|int) + '원') if c.avg_price is not none else '-' }}</td><td>{{ c.platform_count }} / {{ platforms|length }}개</td></tr>
-        {% else %}
-        <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">인기 셀러를 등록하면 카테고리별 집계가 표시됩니다.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
+<script>
+(function () {
+  "use strict";
+  var wrap = document.querySelector(".guide-tabs-wrap");
+  if (!wrap) return;
+  wrap.querySelectorAll(".subtab").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var step = btn.dataset.step;
+      wrap.querySelectorAll(".subtab").forEach(function (b) { b.classList.toggle("active", b === btn); });
+      wrap.querySelectorAll(".step-guide").forEach(function (panel) {
+        panel.classList.toggle("active", panel.dataset.step === step);
+      });
+    });
+  });
+})();
+</script>
 {% endblock %}
