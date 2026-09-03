@@ -132,6 +132,8 @@ CREATE TABLE IF NOT EXISTS marketplace_best_items (
   discount_pct INTEGER,
   sale_price INTEGER,
   link TEXT NOT NULL DEFAULT '',
+  keyword TEXT,        -- 네이버 전용: 검색량을 확인한 키워드
+  search_count INTEGER, -- 네이버 전용: 월간 검색량(PC+모바일 합)
   collected_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_best_items_category ON marketplace_best_items(category, rank);
