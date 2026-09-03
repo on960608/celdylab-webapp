@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}인스타그램 댓글 추출 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">EVENT · INSTAGRAM COMMENTS</div>
+  <h2>인스타그램 댓글 추출</h2>
+  <p>인스타그램 이벤트 게시물의 댓글을 전부 모아 엑셀 파일로 만들어요. 댓글 ID 기준으로 중복은 자동으로 제거돼요.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+  <p class="note" style="margin:0">⚠ 인스타그램은 로그인한 사용자에게만 댓글 전체를 내려주고, 외부 서버가 게시물 링크만으로 그 내부 API를 직접 호출하는 건 인스타그램의 인증·보안 정책상 막혀 있어요. 그래서 "링크만 입력하면 서버가 알아서 다 가져오는" 방식은 기술적으로 불가능해요 — 일부만 가져와 놓고 전체를 모은 것처럼 보여드리지 않으려고, 이미 검증된 방법을 그대로 자동화했어요. 아래처럼 브라우저에서 댓글을 전부 스크롤해 불러온 뒤 저장한 <b>HAR 파일 하나만 올리면</b>, 그 안의 모든 페이지 응답을 자동으로 찾아 모으고 정리해서 엑셀로 만들어드려요. 직접 하실 일은 "HAR 파일로 저장하기" 한 번뿐이에요.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>HAR 파일 저장 방법</h3><div class="unit">크롬 기준 4단계예요. 한 번 해두면 다음부터는 금방 익숙해져요.</div></div></div>
+  <div class="steps" style="margin-top:10px">
+    <div class="step"><div class="badge">STEP 01</div><h3>게시물 열기</h3><p>추출할 게시물을 크롬에서 열고, F12(개발자도구) → <b>Network</b> 탭을 열어요.</p></div>
+    <div class="step"><div class="badge">STEP 02</div><h3>Fetch/XHR로 필터</h3><p>Network 탭 상단 필터를 <b>Fetch/XHR</b>로 맞춰서 불필요한 이미지·스크립트 요청을 숨겨요.</p></div>
+    <div class="step"><div class="badge">STEP 03</div><h3>댓글 끝까지 불러오기</h3><p>게시물의 댓글 영역을 <b>맨 아래까지 스크롤</b>해서 "더 보기"가 사라질 때까지 모든 댓글을 불러와요.</p></div>
+    <div class="step"><div class="badge">STEP 04</div><h3>HAR로 저장</h3><p>Network 탭 목록에서 우클릭 → <b>"Save all as HAR with content"</b>를 눌러 .har 파일로 저장해요.</p></div>
+  </div>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>댓글 불러오기</h3></div></div>
+  <form id="igForm" class="ins-form-grid" enctype="multipart/form-data">
+    <label class="ins-wide">게시물 링크 (선택 — 기록용, 실제 수집은 아래 HAR 파일로 진행돼요)
+      <input name="post_url" id="postUrl" placeholder="https://www.instagram.com/p/xxxxx/">
+    </label>
+    <label class="ins-wide">HAR 파일
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px">
+        <input type="file" name="har_file" id="harFile" accept=".har" style="max-width:260px">
+        <small style="color:var(--muted2)">위 STEP 04에서 저장한 .har 파일을 올려주세요.</small>
+      </div>
+    </label>
+    <div class="ins-wide" style="display:flex;justify-content:flex-end">
+      <button class="refresh-btn" type="submit" id="extractBtn" style="font-size:14px;padding:11px 22px">댓글 불러오기</button>
+    </div>
+  </form>
+</div>
+
+<div class="chart-card" id="progressCard" style="margin-bottom:16px;display:none">
+  <div class="chart-card-head"><div><h3>수집 진행 상황</h3></div></div>
+  <p class="note" id="statusText" style="margin:0 0 10px;font-weight:700;color:var(--ink)">시작하는 중...</p>
+  <div style="height:8px;border-radius:999px;background:var(--line);overflow:hidden">
+    <div id="progressFill" style="height:100%;width:0%;background:linear-gradient(135deg,var(--accent),var(--accent-deep));border-radius:999px;transition:width .2s ease"></div>
+  </div>
+  <p class="note" id="errorText" style="display:none;color:var(--down);font-weight:700"></p>
+</div>
+
+<div class="chart-card" id="resultCard" style="display:none">
+  <div class="chart-card-head"><div><h3>✓ 댓글 수집 완료</h3></div></div>
+  <div class="stat-row" style="margin-bottom:14px">
+    <div class="stat-tile"><span class="label">전체 댓글</span><strong id="statRaw">0</strong></div>
+    <div class="stat-tile"><span class="label">중복 제거</span><strong id="statDup">0</strong></div>
+    <div class="stat-tile"><span class="label">최종 데이터</span><strong id="statFinal">0</strong></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <a class="refresh-btn" id="downloadLink" style="text-decoration:none" href="#">⬇ Excel 다운로드</a>
+    <span class="note" style="margin:0">이 엑셀 파일은 그대로 <a href="{{ url_for('giveaway.index') }}" style="color:var(--accent-deep);font-weight:700">댓글 이벤트 추첨</a> 페이지의 파일 업로드칸에도 올려서 당첨자를 뽑을 수 있어요.</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var form = document.getElementById("igForm");
+  var harFile = document.getElementById("harFile");
+  var extractBtn = document.getElementById("extractBtn");
+  var progressCard = document.getElementById("progressCard");
+  var progressFill = document.getElementById("progressFill");
+  var statusText = document.getElementById("statusText");
+  var errorText = document.getElementById("errorText");
+  var resultCard = document.getElementById("resultCard");
+
+  function fmt(n) { return (n || 0).toLocaleString("ko-KR"); }
+
+  function showError(message) {
+    errorText.textContent = message || "알 수 없는 오류가 발생했어요.";
+    errorText.style.display = "block";
+    statusText.textContent = "✗ 수집을 완료하지 못했어요.";
+    extractBtn.disabled = false;
+    extractBtn.textContent = "댓글 불러오기";
+  }
+
+  function handleEvent(evt) {
+    if (evt.type === "progress") {
+      var pct = evt.total ? Math.min(100, Math.round((evt.scanned / evt.total) * 100)) : 0;
+      progressFill.style.width = pct + "%";
+      if (evt.total) {
+        statusText.textContent = "댓글을 수집하고 있습니다. HAR 파일 스캔 중 (" + fmt(evt.scanned) + " / " + fmt(evt.total) + " 항목) · 수집된 댓글 " + fmt(evt.found) + "개";
+      } else {
+        statusText.textContent = "댓글을 수집하고 있습니다. 수집된 댓글 " + fmt(evt.found) + "개";
+      }
+    } else if (evt.type === "error") {
+      showError(evt.message);
+    } else if (evt.type === "done") {
+      progressFill.style.width = "100%";
+      statusText.textContent = "✓ 댓글 수집 완료";
+      document.getElementById("statRaw").textContent = fmt(evt.raw_found) + "개";
+      document.getElementById("statDup").textContent = fmt(evt.duplicates_removed) + "개";
+      document.getElementById("statFinal").textContent = fmt(evt.final_count) + "개";
+      document.getElementById("downloadLink").href = "{{ url_for('igcomments.download', token='__TOKEN__') }}".replace("__TOKEN__", evt.token);
+      resultCard.style.display = "";
+      extractBtn.disabled = false;
+      extractBtn.textContent = "댓글 불러오기";
+    }
+  }
+
+  function consumeStream(resp) {
+    var buffer = "";
+    function handleChunkText(chunkText) {
+      buffer += chunkText;
+      var lines = buffer.split("\n");
+      buffer = lines.pop();
+      lines.forEach(function (line) {
+        if (!line.trim()) return;
+        try { handleEvent(JSON.parse(line)); } catch (e) { /* 무시 */ }
+      });
+    }
+    if (resp.body && resp.body.getReader && window.TextDecoder) {
+      var reader = resp.body.getReader();
+      var decoder = new TextDecoder();
+      return (function pump() {
+        return reader.read().then(function (result) {
+          if (result.done) {
+            if (buffer.trim()) { try { handleEvent(JSON.parse(buffer)); } catch (e) {} }
+            return;
+          }
+          handleChunkText(decoder.decode(result.value, { stream: true }));
+          return pump();
+        });
+      })();
+    }
+    // 스트리밍을 지원하지 않는 브라우저는 전체 응답을 한 번에 받아서 순서대로 처리해요
+    // (실시간 진행률만 못 볼 뿐, 최종 결과는 동일하게 표시돼요).
+    return resp.text().then(handleChunkText);
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!harFile.files || !harFile.files.length) {
+      window.alert("HAR 파일을 먼저 선택해 주세요.");
+      return;
+    }
+    errorText.style.display = "none";
+    resultCard.style.display = "none";
+    progressCard.style.display = "";
+    progressFill.style.width = "0%";
+    statusText.textContent = "댓글을 수집하고 있습니다. HAR 파일을 여는 중...";
+    extractBtn.disabled = true;
+    extractBtn.textContent = "수집 중...";
+
+    var formData = new FormData();
+    formData.append("har_file", harFile.files[0]);
+    formData.append("post_url", document.getElementById("postUrl").value.trim());
+
+    fetch("{{ url_for('igcomments.extract') }}", { method: "POST", body: formData })
+      .then(function (resp) {
+        if (!resp.ok) { throw new Error("요청이 실패했어요 (HTTP " + resp.status + ")"); }
+        return consumeStream(resp);
+      })
+      .catch(function (e) {
+        showError("연결 중 오류가 발생했어요: " + e.message);
+      });
+  });
+})();
+</script>
+{% endblock %}
