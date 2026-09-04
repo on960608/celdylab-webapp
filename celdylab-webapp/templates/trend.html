@@ -118,48 +118,152 @@
 
   <div class="step-guide" data-step="marketplace">
     <div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
-      <p class="note" style="margin:0">⚠ <b>G마켓 베스트만 자동 수집돼요.</b> 쿠팡·네이버 스마트스토어·11번가는 사이트가 우리를 막은 게 아니라, 자동화 도구 자체의 안전 정책 때문에 접속이 막혀 있어요 — 되는 것처럼 우회하지 않고 자동화 대상에서 뺐어요. 또한 쿠팡윙·네이버 커머스센터 등 로그인이 필요한 자사 상품의 노출·판매 데이터는 이 방식으로는 수집할 수 없어요(셀러센터 오픈 API 연동이 별도로 필요해요). 아래는 어디까지나 시장 전체의 베스트셀러 동향 참고용이에요.</p>
+      <p class="note" style="margin:0">⚠ <b>G마켓은 자동 수집, 네이버는 공식 API로 자동 수집, 쿠팡은 HAR 파일 업로드</b>로 진행돼요. 쿠팡·네이버 쇼핑 화면 자체·11번가는 브라우저 자동화 도구 자체의 안전 정책 때문에 접속이 막혀 있어요 — 사이트가 우리를 막은 게 아니라 자동화 도구 쪽에서 애초에 막아 둔 카테고리(전자상거래 결제/로그인 성격 사이트)라서, 되는 것처럼 우회하지 않았어요. 네이버는 대신 검색광고·쇼핑검색 공식 API로 정식 연동했고(카테고리 베스트 랭킹 API 자체가 없어서 "검색량 상위 키워드 + 그 대표 상품"으로 대신해요), 쿠팡은 인스타 댓글 추출 기능과 같은 HAR 업로드 방식이에요. 쿠팡윙·네이버 커머스센터 등 로그인이 필요한 자사 상품의 노출·판매 데이터는 이 방식으로는 수집할 수 없어요(셀러센터 오픈 API 연동이 별도로 필요해요).</p>
     </div>
 
-    <div class="chart-card" style="margin-bottom:16px">
-      <div class="chart-card-head" style="align-items:center">
-        <div><div class="eyebrow" style="margin-bottom:4px">G마켓 베스트</div><h3>카테고리별 베스트셀러</h3><div class="unit">셀디랩 판매 카테고리(청소·주방·구강제품·침구·생활용품)에 매칭되는 G마켓 베스트 카테고리의 상위 순위예요. {{ '마지막 갱신: ' + marketplace_collected_at[:16].replace('T',' ') + ' UTC' if marketplace_collected_at else '아직 수집된 데이터가 없어요.' }}</div></div>
-        <form method="post" action="{{ url_for('trend.marketplace_refresh') }}">
-          <button class="refresh-btn" type="submit" title="G마켓 베스트 5개 카테고리를 지금 이 순간 다시 읽어와서 이전 데이터를 새 순위로 바로 교체해요. 참고: 새로고침만 해도 5분에 한 번은 자동으로 갱신돼요.">⚡ 지금 다시 수집</button>
-        </form>
+    <div class="platform-tabs-wrap">
+      <div class="platform-subtab-bar" role="tablist" aria-label="마켓플레이스 플랫폼 탭">
+        <button class="platform-subtab active" type="button" data-platform="gmarket">G마켓 <span style="font-size:10px;font-weight:600;color:var(--up)">⚡자동</span></button>
+        <button class="platform-subtab" type="button" data-platform="naver">네이버 <span style="font-size:10px;font-weight:600;color:var(--up)">⚡자동(API)</span></button>
+        <button class="platform-subtab" type="button" data-platform="coupang">쿠팡 <span style="font-size:10px;font-weight:600;color:var(--muted)">📎 HAR 업로드</span></button>
+      </div>
+
+      <div class="platform-panel active" data-platform="gmarket">
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="chart-card-head" style="align-items:center">
+            <div><div class="eyebrow" style="margin-bottom:4px">G마켓 베스트</div><h3>카테고리별 베스트셀러</h3><div class="unit">셀디랩 판매 카테고리(청소·주방·구강제품·침구·생활용품)에 매칭되는 G마켓 베스트 카테고리의 상위 순위예요. {{ '마지막 갱신: ' + marketplace_collected_at['G마켓'][:16].replace('T',' ') + ' UTC' if marketplace_collected_at['G마켓'] else '아직 수집된 데이터가 없어요.' }}</div></div>
+            <form method="post" action="{{ url_for('trend.marketplace_refresh') }}">
+              <button class="refresh-btn" type="submit" title="G마켓 베스트 5개 카테고리를 지금 이 순간 다시 읽어와서 이전 데이터를 새 순위로 바로 교체해요. 참고: 새로고침만 해도 5분에 한 번은 자동으로 갱신돼요.">⚡ 지금 다시 수집</button>
+            </form>
+          </div>
+        </div>
+
+        {% for cat in marketplace_categories %}
+          {% set stat = marketplace_stats['G마켓'][cat] %}
+          <div class="chart-card" style="margin-bottom:16px">
+            <div class="chart-card-head"><div><h3>{{ cat }}</h3><div class="unit">G마켓 베스트 상위 {{ stat.total_count }}개 중 {{ stat.shown|length }}개 표시</div></div></div>
+            <div class="stat-row" style="margin-bottom:12px">
+              <div class="stat-tile"><span class="label">수집된 순위</span><strong>{{ stat.total_count }}개</strong></div>
+              <div class="stat-tile"><span class="label">평균 판매가</span><strong>{{ ('{:,}'.format(stat.avg_price|round|int) + '원') if stat.avg_price is not none else '-' }}</strong></div>
+              <div class="stat-tile"><span class="label">최대 할인율</span><strong>{{ (stat.max_discount|string + '%') if stat.max_discount is not none else '-' }}</strong></div>
+            </div>
+            <div class="chart-svg-wrap">
+              <table class="data-table">
+                <thead><tr><th>순위</th><th>상품명</th><th>정가</th><th>할인율</th><th>판매가</th><th>링크</th></tr></thead>
+                <tbody>
+                  {% for it in stat.shown %}
+                  <tr>
+                    <td>{{ it.rank }}</td>
+                    <td>{{ it.product }}</td>
+                    <td>{{ ('{:,}'.format(it.original_price) + '원') if it.original_price is not none else '-' }}</td>
+                    <td>{{ (it.discount_pct|string + '%') if it.discount_pct is not none else '-' }}</td>
+                    <td>{{ ('{:,}'.format(it.sale_price) + '원') if it.sale_price is not none else '-' }}</td>
+                    <td>{% if it.link %}<a href="{{ it.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+                  </tr>
+                  {% else %}
+                  <tr><td colspan="6" style="text-align:center;color:var(--muted2);padding:20px 0">아직 수집된 데이터가 없어요. 위 "⚡ 지금 다시 수집"을 눌러 보세요.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="platform-panel" data-platform="naver">
+        {% if naver_api_configured %}
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="chart-card-head" style="align-items:center">
+            <div><div class="eyebrow" style="margin-bottom:4px">네이버 검색광고 + 쇼핑검색 API</div><h3>카테고리별 검색량 상위 키워드</h3><div class="unit">카테고리 후보 키워드 중 월간 검색량(PC+모바일)이 가장 높은 순으로 최대 5개와, 그 키워드의 쇼핑검색 대표 상품이에요. {{ '마지막 갱신: ' + marketplace_collected_at['네이버'][:16].replace('T',' ') + ' UTC' if marketplace_collected_at['네이버'] else '아직 수집된 데이터가 없어요.' }}</div></div>
+            <form method="post" action="{{ url_for('trend.marketplace_naver_refresh') }}">
+              <button class="refresh-btn" type="submit" title="네이버 검색광고/쇼핑검색 API를 지금 이 순간 다시 호출해서 카테고리별 순위를 바로 교체해요. 참고: 새로고침만 해도 5분에 한 번은 자동으로 갱신돼요.">⚡ 지금 다시 수집</button>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+          <p class="note" style="margin:0">⚠ 네이버 API 키가 아직 등록되지 않았어요. Railway 프로젝트 Variables에 <code>NAVER_SEARCHAD_API_KEY</code> · <code>NAVER_SEARCHAD_SECRET_KEY</code> · <code>NAVER_SEARCHAD_CUSTOMER_ID</code>(검색광고 searchad.naver.com [도구 &gt; API 사용 관리]에서 발급) · <code>NAVER_SHOPPING_CLIENT_ID</code> · <code>NAVER_SHOPPING_CLIENT_SECRET</code>(개발자센터 developers.naver.com/apps에서 "검색" API 추가 후 발급) 5개를 등록하면 이 탭이 자동으로 켜져요.</p>
+        </div>
+        {% endif %}
+
+        {% for cat in marketplace_categories %}
+          {% set stat = marketplace_stats['네이버'][cat] %}
+          <div class="chart-card" style="margin-bottom:16px">
+            <div class="chart-card-head"><div><h3>{{ cat }}</h3><div class="unit">검색량 상위 {{ stat.shown|length }}개 키워드</div></div></div>
+            <div class="chart-svg-wrap">
+              <table class="data-table">
+                <thead><tr><th>순위</th><th>검색어</th><th>월간 검색수</th><th>대표 상품</th><th>판매가</th><th>링크</th></tr></thead>
+                <tbody>
+                  {% for it in stat.shown %}
+                  <tr>
+                    <td>{{ it.rank }}</td>
+                    <td>{{ it.keyword or '-' }}</td>
+                    <td>{{ '{:,}'.format(it.search_count) if it.search_count is not none else '-' }}</td>
+                    <td>{{ it.product or '-' }}</td>
+                    <td>{{ ('{:,}'.format(it.sale_price) + '원') if it.sale_price is not none else '-' }}</td>
+                    <td>{% if it.link %}<a href="{{ it.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+                  </tr>
+                  {% else %}
+                  <tr><td colspan="6" style="text-align:center;color:var(--muted2);padding:20px 0">{{ '아직 수집된 데이터가 없어요. 위 "⚡ 지금 다시 수집"을 눌러 보세요.' if naver_api_configured else 'API 키를 등록하면 이 자리에 검색량 상위 키워드가 표시돼요.' }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="platform-panel" data-platform="coupang">
+        <div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+          <p class="note" style="margin:0">⚠ 쿠팡은 공식 검색량 API도 없고 자동화 접속도 막혀 있어서, 자동 수집 대신 <b>HAR 파일 업로드</b> 방식으로 진행해요(인스타그램 댓글 추출 기능과 같은 방식). ① 크롬에서 쿠팡 로그인 → 반영하고 싶은 카테고리 베스트/랭킹 페이지로 이동 ② 페이지 끝까지 스크롤해서 상품을 다 불러오기 ③ F12 → Network 탭 → 새로고침 → 목록에서 우클릭 → "Save all as HAR with content" ④ 아래에서 카테고리를 선택하고 저장한 .har 파일을 올리기.</p>
+        </div>
+
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="chart-card-head"><div><h3>쿠팡 HAR 파일 업로드</h3></div></div>
+          <form method="post" action="{{ url_for('trend.marketplace_coupang_upload') }}" enctype="multipart/form-data" class="ins-form-grid">
+            <label>카테고리<select name="category">{% for cat in marketplace_categories %}<option>{{ cat }}</option>{% endfor %}</select></label>
+            <label class="ins-wide">HAR 파일
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px">
+                <input type="file" name="har_file" accept=".har" required style="max-width:260px">
+                <small style="color:var(--muted2)">위 안내대로 저장한 .har 파일을 올려주세요.</small>
+              </div>
+            </label>
+            <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">업로드해서 반영</button></div>
+          </form>
+        </div>
+
+        {% for cat in marketplace_categories %}
+          {% set stat = marketplace_stats['쿠팡'][cat] %}
+          <div class="chart-card" style="margin-bottom:16px">
+            <div class="chart-card-head"><div><h3>{{ cat }}</h3><div class="unit">{{ (stat.shown|length|string + '개 표시') if stat.total_count else '아직 업로드된 데이터가 없어요.' }}</div></div></div>
+            <div class="stat-row" style="margin-bottom:12px">
+              <div class="stat-tile"><span class="label">업로드된 순위</span><strong>{{ stat.total_count }}개</strong></div>
+              <div class="stat-tile"><span class="label">평균 판매가</span><strong>{{ ('{:,}'.format(stat.avg_price|round|int) + '원') if stat.avg_price is not none else '-' }}</strong></div>
+              <div class="stat-tile"><span class="label">최대 할인율</span><strong>{{ (stat.max_discount|string + '%') if stat.max_discount is not none else '-' }}</strong></div>
+            </div>
+            <div class="chart-svg-wrap">
+              <table class="data-table">
+                <thead><tr><th>순위</th><th>상품명</th><th>정가</th><th>할인율</th><th>판매가</th><th>링크</th></tr></thead>
+                <tbody>
+                  {% for it in stat.shown %}
+                  <tr>
+                    <td>{{ it.rank }}</td>
+                    <td>{{ it.product }}</td>
+                    <td>{{ ('{:,}'.format(it.original_price) + '원') if it.original_price is not none else '-' }}</td>
+                    <td>{{ (it.discount_pct|string + '%') if it.discount_pct is not none else '-' }}</td>
+                    <td>{{ ('{:,}'.format(it.sale_price) + '원') if it.sale_price is not none else '-' }}</td>
+                    <td>{% if it.link %}<a href="{{ it.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+                  </tr>
+                  {% else %}
+                  <tr><td colspan="6" style="text-align:center;color:var(--muted2);padding:20px 0">위에서 이 카테고리를 선택하고 HAR 파일을 올려 보세요.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endfor %}
       </div>
     </div>
-
-    {% for cat in marketplace_categories %}
-      {% set stat = marketplace_stats[cat] %}
-      <div class="chart-card" style="margin-bottom:16px">
-        <div class="chart-card-head"><div><h3>{{ cat }}</h3><div class="unit">G마켓 베스트 상위 {{ stat.total_count }}개 중 {{ stat.shown|length }}개 표시</div></div></div>
-        <div class="stat-row" style="margin-bottom:12px">
-          <div class="stat-tile"><span class="label">수집된 순위</span><strong>{{ stat.total_count }}개</strong></div>
-          <div class="stat-tile"><span class="label">평균 판매가</span><strong>{{ ('{:,}'.format(stat.avg_price|round|int) + '원') if stat.avg_price is not none else '-' }}</strong></div>
-          <div class="stat-tile"><span class="label">최대 할인율</span><strong>{{ (stat.max_discount|string + '%') if stat.max_discount is not none else '-' }}</strong></div>
-        </div>
-        <div class="chart-svg-wrap">
-          <table class="data-table">
-            <thead><tr><th>순위</th><th>상품명</th><th>정가</th><th>할인율</th><th>판매가</th><th>링크</th></tr></thead>
-            <tbody>
-              {% for it in stat.shown %}
-              <tr>
-                <td>{{ it.rank }}</td>
-                <td>{{ it.product }}</td>
-                <td>{{ ('{:,}'.format(it.original_price) + '원') if it.original_price is not none else '-' }}</td>
-                <td>{{ (it.discount_pct|string + '%') if it.discount_pct is not none else '-' }}</td>
-                <td>{{ ('{:,}'.format(it.sale_price) + '원') if it.sale_price is not none else '-' }}</td>
-                <td>{% if it.link %}<a href="{{ it.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
-              </tr>
-              {% else %}
-              <tr><td colspan="6" style="text-align:center;color:var(--muted2);padding:20px 0">아직 수집된 데이터가 없어요. 위 "⚡ 지금 다시 수집"을 눌러 보세요.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    {% endfor %}
   </div>
 </div>
 
@@ -174,6 +278,23 @@
       wrap.querySelectorAll(".subtab").forEach(function (b) { b.classList.toggle("active", b === btn); });
       wrap.querySelectorAll(".step-guide").forEach(function (panel) {
         panel.classList.toggle("active", panel.dataset.step === step);
+      });
+    });
+  });
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var wrap = document.querySelector(".platform-tabs-wrap");
+  if (!wrap) return;
+  wrap.querySelectorAll(".platform-subtab").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var platform = btn.dataset.platform;
+      wrap.querySelectorAll(".platform-subtab").forEach(function (b) { b.classList.toggle("active", b === btn); });
+      wrap.querySelectorAll(".platform-panel").forEach(function (panel) {
+        panel.classList.toggle("active", panel.dataset.platform === platform);
       });
     });
   });
