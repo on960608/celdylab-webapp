@@ -98,7 +98,9 @@ def _run_marketplace_scrape():
 
 def _maybe_auto_scrape_marketplace_on_load():
     """공구 셀러 트렌드와 같은 방식으로, 최근 AUTO_REFRESH_MIN_INTERVAL_SECONDS 안에 이미
-    수집했으면 건너뛰고 그렇지 않으면 지금 다시 수집해요."""
+    수집했으면 건너뛰고 그렇지 않으면 지금 다시 수집해요. G마켓만 해당돼요 — 네이버는 API
+    호출 횟수 때문에 페이지를 열 때마다 자동으로 돌리지 않고 "⚡ 지금 다시 수집" 버튼을
+    눌렀을 때만 호출해요. 쿠팡은 HAR 업로드 방식이라 애초에 자동 수집 대상이 아니에요."""
     latest = db.latest_marketplace_collected_at("G마켓")
     if latest:
         try:
@@ -110,14 +112,13 @@ def _maybe_auto_scrape_marketplace_on_load():
     _run_marketplace_scrape()
 
 
-def _run_naver_marketplace_scrape():
-    """네이버 검색광고/쇼핑검색 공식 API로 카테고리별 검색량 상위 5개 키워드+대표 상품을
-    다시 읽어와서, 카테고리별로 기존 데이터를 새 순위로 통째로 교체해요.
-    API 키가 등록돼 있지 않으면 아무 것도 하지 않고 안내 메시지만 돌려줘요."""
+def _run_marketplace_naver_scrape():
+    """네이버 검색광고/쇼핑 API로 카테고리별 대표 키워드의 검색량 상위 5개를 다시 읽어와서
+    교체해요. API 키가 없으면 아무것도 하지 않고 안내 메시지만 돌려줘요."""
     import marketplace_scraper
 
     if not marketplace_scraper.naver_api_configured():
-        return 0, ["네이버 API 키가 아직 등록되지 않았어요 (Railway Variables 확인 필요)"]
+        return 0, ["네이버 API 키가 아직 설정되지 않았어요"]
 
     total = 0
     summaries = []
@@ -133,29 +134,10 @@ def _run_naver_marketplace_scrape():
     return total, summaries
 
 
-def _maybe_auto_scrape_naver_on_load():
-    """G마켓과 같은 방식으로, 최근 AUTO_REFRESH_MIN_INTERVAL_SECONDS 안에 이미 수집했으면
-    건너뛰어요. API 키가 없으면 시도 자체를 하지 않아요."""
-    import marketplace_scraper
-
-    if not marketplace_scraper.naver_api_configured():
-        return
-    latest = db.latest_marketplace_collected_at("네이버")
-    if latest:
-        try:
-            elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(latest)).total_seconds()
-        except ValueError:
-            elapsed = None
-        if elapsed is not None and elapsed < AUTO_REFRESH_MIN_INTERVAL_SECONDS:
-            return
-    _run_naver_marketplace_scrape()
-
-
 @trend_bp.route("/")
 def index():
     _maybe_auto_scrape_on_load()
     _maybe_auto_scrape_marketplace_on_load()
-    _maybe_auto_scrape_naver_on_load()
     records = [dict(r) for r in db.list_trend_records()]
 
     # 인기 셀러 분석 — 셀러별로 묶어서 등록 횟수 순 나열
@@ -217,45 +199,41 @@ def index():
         key=lambda c: -c["count"],
     )
 
-    # 이커머스 마켓플레이스 베스트셀러 — 플랫폼(G마켓/네이버/쿠팡)별, 카테고리별로 묶고
-    # 화면에는 상위 N개만 노출
+    # 이커머스 마켓플레이스 베스트셀러 — G마켓/네이버/쿠팡 플랫폼별 · 카테고리별로 묶고,
+    # 화면에는 플랫폼별 상위 N개만 노출
     import marketplace_scraper
 
+    mp_categories = list(marketplace_scraper.GMARKET_CATEGORY_MAP.keys())
+    mp_platforms = ["G마켓", "네이버", "쿠팡"]
     marketplace_items = [dict(r) for r in db.list_marketplace_best_items()]
-    marketplace_by_platform = {"G마켓": {}, "네이버": {}, "쿠팡": {}}
-    for it in marketplace_items:
-        marketplace_by_platform.setdefault(it["platform"], {}).setdefault(it["category"], []).append(it)
 
-    def _build_stats(items_by_category):
-        stats = {}
-        for cat in marketplace_scraper.MARKETPLACE_CATEGORIES:
-            items = items_by_category.get(cat, [])
-            shown = items[:MARKETPLACE_DISPLAY_LIMIT]
+    marketplace_stats = {p: {c: [] for c in mp_categories} for p in mp_platforms}
+    for it in marketplace_items:
+        p, c = it.get("platform"), it.get("category")
+        if p in marketplace_stats and c in marketplace_stats[p]:
+            marketplace_stats[p][c].append(it)
+
+    for p in mp_platforms:
+        for c in mp_categories:
+            items = marketplace_stats[p][c]
             prices = [it["sale_price"] for it in items if it["sale_price"]]
             discounts = [it["discount_pct"] for it in items if it["discount_pct"] is not None]
-            stats[cat] = {
-                "shown": shown,
+            marketplace_stats[p][c] = {
+                "shown": items[:MARKETPLACE_DISPLAY_LIMIT],
                 "total_count": len(items),
                 "avg_price": (sum(prices) / len(prices)) if prices else None,
                 "max_discount": max(discounts) if discounts else None,
             }
-        return stats
 
-    marketplace_stats = {
-        platform: _build_stats(items_by_category)
-        for platform, items_by_category in marketplace_by_platform.items()
-    }
-    marketplace_collected_at = {
-        platform: db.latest_marketplace_collected_at(platform)
-        for platform in marketplace_by_platform
-    }
+    marketplace_collected_at = {p: db.latest_marketplace_collected_at(p) for p in mp_platforms}
 
     return render_template(
         "trend.html",
         platforms=TREND_PLATFORMS, categories=TREND_CATEGORIES, platform_links=TREND_PLATFORM_LINKS,
         records=records, popular_sellers=popular_sellers, category_insights=category_insights,
         api_key_configured=bool(os.environ.get("AUTOMATION_API_KEY")),
-        marketplace_categories=marketplace_scraper.MARKETPLACE_CATEGORIES,
+        marketplace_categories=mp_categories,
+        marketplace_platforms=mp_platforms,
         marketplace_stats=marketplace_stats,
         marketplace_collected_at=marketplace_collected_at,
         naver_api_configured=marketplace_scraper.naver_api_configured(),
@@ -316,55 +294,53 @@ def marketplace_refresh():
     total, summaries = _run_marketplace_scrape()
 
     if total:
-        flash("G마켓 수집 완료 — " + " · ".join(summaries) + f" (총 {total}건)")
+        flash("마켓플레이스 수집 완료 — " + " · ".join(summaries) + f" (총 {total}건)")
     else:
-        flash("G마켓 수집 실패 — " + " · ".join(summaries) if summaries else "수집에 실패했어요.")
+        flash("마켓플레이스 수집 실패 — " + " · ".join(summaries) if summaries else "수집에 실패했어요.")
     return redirect(url_for("trend.index"))
 
 
-@trend_bp.route("/marketplace/naver/refresh", methods=["POST"])
+@trend_bp.route("/marketplace/naver-refresh", methods=["POST"])
 def marketplace_naver_refresh():
-    """마켓플레이스 베스트셀러 탭의 네이버 서브탭 '⚡ 지금 다시 수집' 버튼 — 대기시간 없이
-    지금 바로 네이버 검색광고/쇼핑검색 API를 다시 호출해서 카테고리별 순위를 교체해요."""
-    total, summaries = _run_naver_marketplace_scrape()
+    """마켓플레이스 베스트셀러 탭의 네이버 서브탭 '⚡ 지금 다시 수집' 버튼 — 검색광고/쇼핑
+    API로 카테고리별 검색량 상위 5개를 지금 바로 다시 읽어와서 교체해요."""
+    total, summaries = _run_marketplace_naver_scrape()
 
     if total:
-        flash("네이버 수집 완료 — " + " · ".join(summaries) + f" (총 {total}건)")
+        flash("네이버 검색량 수집 완료 — " + " · ".join(summaries) + f" (총 {total}건)")
     else:
-        flash("네이버 수집 실패 — " + " · ".join(summaries) if summaries else "수집에 실패했어요.")
+        flash("네이버 검색량 수집 실패 — " + (" · ".join(summaries) if summaries else "수집에 실패했어요."))
     return redirect(url_for("trend.index"))
 
 
-@trend_bp.route("/marketplace/coupang/upload", methods=["POST"])
+@trend_bp.route("/marketplace/coupang-upload", methods=["POST"])
 def marketplace_coupang_upload():
-    """마켓플레이스 베스트셀러 탭의 쿠팡 서브탭 — 희현님이 직접 저장한 HAR 파일을 업로드하면
-    그 안에서 상품 목록을 찾아 파싱해서 선택한 카테고리의 순위로 통째로 교체해요
-    (쿠팡은 공식 검색량 API도 없고 자동화 접속도 막혀 있어서, 인스타 댓글 추출 기능과 같은
-    HAR 업로드 방식으로 진행해요 — marketplace_scraper.py / coupang_best.py 상단 설명 참고)."""
+    """마켓플레이스 베스트셀러 탭의 쿠팡 서브탭 — 직접 저장한 HAR 파일을 올리면 그 안의
+    상품 목록을 읽어서 선택한 카테고리의 순위 데이터로 교체해요."""
     import coupang_best
     import marketplace_scraper
 
     category = request.form.get("category", "").strip()
-    if category not in marketplace_scraper.MARKETPLACE_CATEGORIES:
+    har_file = request.files.get("har_file")
+
+    if category not in marketplace_scraper.GMARKET_CATEGORY_MAP:
         flash("카테고리를 선택해 주세요.")
         return redirect(url_for("trend.index"))
-
-    har_file = request.files.get("har_file")
     if not har_file or not har_file.filename:
         flash("HAR 파일을 먼저 선택해 주세요.")
         return redirect(url_for("trend.index"))
     if not har_file.filename.lower().endswith(".har"):
-        flash("HAR 파일(.har)만 올릴 수 있어요. 크롬 개발자도구 Network 탭에서 우클릭 → 'Save all as HAR with content'로 저장해 주세요.")
+        flash("HAR 파일(.har)만 올릴 수 있어요. 개발자도구 Network 탭에서 'Save all as HAR with content'로 저장해 주세요.")
         return redirect(url_for("trend.index"))
 
     raw_bytes = har_file.read()
     items, error = coupang_best.parse_coupang_har(raw_bytes, limit=50)
     if error:
-        flash(f"쿠팡 HAR 업로드 실패 — {error}")
+        flash("쿠팡 HAR 분석 실패 — " + error)
         return redirect(url_for("trend.index"))
 
     db.replace_marketplace_best_items("쿠팡", category, items)
-    flash(f"쿠팡 '{category}' 카테고리에 {len(items)}건 반영했어요.")
+    flash(f"쿠팡 {category} 순위 {len(items)}건을 반영했어요.")
     return redirect(url_for("trend.index"))
 
 
