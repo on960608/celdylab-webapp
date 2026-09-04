@@ -23,20 +23,18 @@ def init_db():
         conn.executescript(f.read())
     conn.commit()
     conn.close()
-    # schema.sql은 CREATE TABLE IF NOT EXISTS라서 이미 있는 테이블에는 새 컬럼이 안 생겨요 —
-    # 마켓플레이스 베스트셀러에 keyword/search_count(네이버 검색량 표시용) 컬럼이 새로 추가됐을 때
-    # 기존에 배포돼 있던 DB에도 안전하게 컬럼을 더해주는 마이그레이션이에요.
     _migrate_marketplace_best_items_columns()
 
 
 def _migrate_marketplace_best_items_columns():
-    """marketplace_best_items 테이블에 keyword/search_count 컬럼이 없으면 추가해요.
-    이미 있으면 아무 것도 하지 않아요(몇 번을 실행해도 안전해요)."""
+    """schema.sql은 CREATE TABLE IF NOT EXISTS라서 이미 만들어진 테이블에는 새 컬럼이
+    안 생겨요 — 네이버 검색량 기능에 필요한 keyword/search_count 컬럼을 이미 배포된 DB에도
+    안전하게(여러 번 실행돼도 괜찮게) 추가해줘요."""
     conn = get_conn()
-    cols = {row["name"] for row in conn.execute("PRAGMA table_info(marketplace_best_items)").fetchall()}
-    if "keyword" not in cols:
+    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(marketplace_best_items)")}
+    if "keyword" not in existing_cols:
         conn.execute("ALTER TABLE marketplace_best_items ADD COLUMN keyword TEXT")
-    if "search_count" not in cols:
+    if "search_count" not in existing_cols:
         conn.execute("ALTER TABLE marketplace_best_items ADD COLUMN search_count INTEGER")
     conn.commit()
     conn.close()
@@ -397,9 +395,8 @@ def latest_auto_trend_refresh_at():
 
 def replace_marketplace_best_items(platform, category, items):
     """(platform, category) 조합의 기존 순위 데이터를 지우고, 지금 막 읽어온 순위로
-    통째로 교체해요. items는 {rank, product, original_price, discount_pct, sale_price, link}
-    목록이고, 네이버처럼 keyword/search_count(검색량)를 추가로 담은 항목도 그대로 받아요 —
-    안 담겨 있으면(G마켓·쿠팡) 자동으로 NULL로 채워요."""
+    통째로 교체해요. items는 {rank, product, original_price, discount_pct, sale_price, link,
+    keyword, search_count} 목록이에요(keyword/search_count는 네이버 전용이라 없으면 None)."""
     conn = get_conn()
     now = now_iso()
     conn.execute(
@@ -409,16 +406,23 @@ def replace_marketplace_best_items(platform, category, items):
     if items:
         conn.executemany(
             """INSERT INTO marketplace_best_items
-               (platform, category, rank, product, original_price, discount_pct, sale_price, link, keyword, search_count, collected_at)
-               VALUES (:platform, :category, :rank, :product, :original_price, :discount_pct, :sale_price, :link, :keyword, :search_count, :collected_at)""",
+               (platform, category, rank, product, original_price, discount_pct, sale_price, link,
+                keyword, search_count, collected_at)
+               VALUES (:platform, :category, :rank, :product, :original_price, :discount_pct, :sale_price, :link,
+                       :keyword, :search_count, :collected_at)""",
             [
                 {
-                    "keyword": None,
-                    "search_count": None,
-                    **it,
                     "platform": platform,
                     "category": category,
                     "collected_at": now,
+                    "rank": it.get("rank"),
+                    "product": it.get("product", ""),
+                    "original_price": it.get("original_price"),
+                    "discount_pct": it.get("discount_pct"),
+                    "sale_price": it.get("sale_price"),
+                    "link": it.get("link", ""),
+                    "keyword": it.get("keyword"),
+                    "search_count": it.get("search_count"),
                 }
                 for it in items
             ],
@@ -427,26 +431,21 @@ def replace_marketplace_best_items(platform, category, items):
     conn.close()
 
 
-def list_marketplace_best_items(platform=None, category=None):
+def list_marketplace_best_items(category=None):
     conn = get_conn()
-    q = "SELECT * FROM marketplace_best_items"
-    conds, params = [], []
-    if platform:
-        conds.append("platform = ?"); params.append(platform)
     if category:
-        conds.append("category = ?"); params.append(category)
-    if conds:
-        q += " WHERE " + " AND ".join(conds)
-    q += " ORDER BY platform, category, rank ASC"
-    rows = conn.execute(q, params).fetchall()
+        rows = conn.execute(
+            "SELECT * FROM marketplace_best_items WHERE category = ? ORDER BY rank ASC", (category,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM marketplace_best_items ORDER BY category, rank ASC").fetchall()
     conn.close()
     return rows
 
 
 def latest_marketplace_collected_at(platform=None):
     """가장 최근 마켓플레이스 베스트셀러 수집이 언제 있었는지(UTC ISO 문자열) 돌려줘요.
-    platform을 주면 그 플랫폼만의 최근 수집 시각을, 안 주면 전체 중 가장 최근 시각을
-    돌려줘요. 한 번도 없었으면 None이에요."""
+    platform을 주면 그 플랫폼만, 아니면 전체 중 가장 최근 값이에요. 한 번도 없었으면 None."""
     conn = get_conn()
     if platform:
         row = conn.execute(
