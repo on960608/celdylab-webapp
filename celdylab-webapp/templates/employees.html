@@ -24,21 +24,26 @@
   <div class="chart-card-head"><div><h3>계정 목록</h3></div></div>
   <div class="chart-svg-wrap">
     <table class="data-table">
-      <thead><tr><th>아이디</th><th>이름</th><th>생성일</th><th></th></tr></thead>
+      <thead><tr><th>아이디</th><th>이름</th><th>생성일</th><th></th><th></th></tr></thead>
       <tbody>
         {% for e in employees %}
         <tr>
-          <td>{{ e.username }}</td>
+          <td>
+            <form method="post" action="{{ url_for('employees_rename', emp_id=e.id) }}" style="display:flex;gap:6px;align-items:center" onsubmit="return confirm('아이디를 변경할까요? 비밀번호는 그대로 유지돼요.')">
+              <input name="new_username" value="{{ e.username }}" style="width:120px;padding:6px 8px;font-size:13px">
+              <button class="refresh-btn" type="submit" style="padding:6px 10px;font-size:12px">변경</button>
+            </form>
+          </td>
           <td>{{ e.name }}{% if e.id == session.get('user_id') %} <span class="ins-badge contact">나</span>{% endif %}</td>
           <td>{{ e.created_at[:10] }}</td>
           <td><form method="post" action="{{ url_for('employees_delete', emp_id=e.id) }}" onsubmit="return confirm('{{ e.name }}({{ e.username }}) 계정을 삭제할까요?')"><button class="ins-del-btn" type="submit">삭제</button></form></td>
         </tr>
         {% else %}
-        <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">계정이 없습니다.</td></tr>
+        <tr><td colspan="5" style="text-align:center;color:var(--muted2);padding:20px 0">계정이 없습니다.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  <p class="note">계정을 삭제하면 그 계정으로는 더 이상 로그인할 수 없어요. 본인 계정과 마지막 남은 계정은 삭제할 수 없게 막아뒀어요.</p>
+  <p class="note">아이디 칸을 고쳐서 "변경" 버튼을 누르면 로그인 아이디가 바뀌어요 (비밀번호는 그대로예요). 계정을 삭제하면 그 계정으로는 더 이상 로그인할 수 없어요. 본인 계정과 마지막 남은 계정은 삭제할 수 없게 막아뒀어요.</p>
 </div>
 {% endblock %}
