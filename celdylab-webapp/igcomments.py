@@ -3,7 +3,7 @@ import json
 import time
 import uuid
 
-from flask import Blueprint, Response, render_template, request, redirect, url_for, session, flash, send_file
+from flask import Blueprint, Response, request, redirect, url_for, session, flash, send_file
 
 from analysis import load_har_entries, extract_comments_from_har_entry, build_ig_comments_excel
 
@@ -32,7 +32,9 @@ def _cleanup_cache():
 
 @igcomments_bp.route("/")
 def index():
-    return render_template("igcomments.html")
+    # "이벤트 관리(인스타그램 댓글 추출)" 페이지는 "댓글 이벤트 추첨" 페이지로 통합됐어요.
+    # 예전 링크/북마크로 들어와도 끊기지 않도록 그쪽으로 안내만 해줘요.
+    return redirect(url_for("giveaway.index"))
 
 
 def _ndjson(obj):
@@ -93,6 +95,11 @@ def extract():
         filename = f"instagram_comments_{final_count}.xlsx"
         _RESULT_CACHE[token] = {"data": buf.getvalue(), "filename": filename, "created_at": time.time()}
 
+        # "댓글 이벤트 추첨" 폼의 댓글 데이터 입력칸(아이디: 댓글 형식)에 바로 채워 넣을 수
+        # 있도록, 추출한 댓글을 텍스트로도 함께 돌려줘요 — 엑셀을 내려받았다가 다시 올리는
+        # 단계 없이, 추출부터 추첨까지 한 페이지에서 끝낼 수 있게 하기 위함이에요.
+        raw_text = "\n".join(f"{c['username']}: {c['text']}" for c in comments)
+
         yield _ndjson({
             "type": "done",
             "raw_found": raw_found,
@@ -101,6 +108,7 @@ def extract():
             "responses_scanned": responses_scanned,
             "token": token,
             "filename": filename,
+            "raw_text": raw_text,
         })
 
     return Response(generate(), mimetype="application/x-ndjson")

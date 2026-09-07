@@ -72,6 +72,13 @@ def create_employee(username, password_hash, name):
     conn.close()
 
 
+def update_employee_username(emp_id, new_username):
+    conn = get_conn()
+    conn.execute("UPDATE employees SET username = ? WHERE id = ?", (new_username, emp_id))
+    conn.commit()
+    conn.close()
+
+
 def list_employees():
     conn = get_conn()
     rows = conn.execute("SELECT id, username, name, created_at FROM employees ORDER BY id").fetchall()
