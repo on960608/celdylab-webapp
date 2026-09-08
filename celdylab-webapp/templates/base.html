@@ -27,6 +27,11 @@
       <a class="nav-link {{ 'active' if request.endpoint == 'archive' else '' }}" href="{{ url_for('archive') }}">자료실</a>
     </nav>
 
+    <div class="nav-label">제품 일정</div>
+    <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint == 'schedule.index' else '' }}" href="{{ url_for('schedule.index') }}">브랜드 제품 일정</a>
+    </nav>
+
     <div class="nav-label">분석</div>
     <nav class="nav-group">
       <a class="nav-link {{ 'active' if request.endpoint == 'trend.index' else '' }}" href="{{ url_for('trend.index') }}">외부몰 트렌드 분석</a>
