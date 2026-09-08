@@ -167,3 +167,26 @@ CREATE TABLE IF NOT EXISTS giveaway_winners (
   comment_text TEXT NOT NULL DEFAULT '',
   keyword_matched INTEGER  -- 1=포함 / 0=미포함 / NULL=일반 댓글 이벤트(해당없음)
 );
+
+-- ---------------------------------------------------------------------------
+-- 브랜드 제품 일정 (출시·공구·협찬·테스트 등을 "카테고리"로 분류해 관리하는 스케줄링 표)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS product_schedule (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  brand TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',          -- 스케줄링 카테고리 (예: 출시/협찬/공구/테스트/콘텐츠/기타 — 자유 입력)
+  date TEXT NOT NULL DEFAULT '',              -- 일정(오픈 예정일), YYYY-MM-DD
+  priority INTEGER,                           -- 브랜드 내 우선순위 (숫자가 작을수록 우선)
+  link TEXT NOT NULL DEFAULT '',
+  selling TEXT NOT NULL DEFAULT '',           -- 소구점
+  timing TEXT NOT NULL DEFAULT '',            -- 판매 시기 (추천 월)
+  group_buy_period TEXT NOT NULL DEFAULT '',  -- 공구 진행 시기
+  recommend_reason TEXT NOT NULL DEFAULT '',  -- 추천 근거
+  sponsor_status TEXT NOT NULL DEFAULT 'none',-- none / sponsored / paid
+  sponsor_note TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
