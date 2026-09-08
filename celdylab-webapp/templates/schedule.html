@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}브랜드 제품 일정 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">SCHEDULING · PRODUCT LAUNCH</div>
+  <h2>브랜드 제품 일정</h2>
+  <p>브랜드별 제품의 출시·공구·협찬·테스트 일정을 "카테고리"로 분류해서 한 표에서 관리해요. 실제 DB에 저장되어 팀 전체 화면에 실시간으로 공유됩니다.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head" style="align-items:center">
+    <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>일정 추가</h3></div>
+    <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 추가</summary>
+      <form method="post" action="{{ url_for('schedule.add') }}" class="ins-form-grid" style="margin-top:12px">
+        <label>브랜드 <span style="color:var(--down)">*</span>
+          <select name="brand" required>
+            <option value="">선택</option>
+            {% for b in brands %}<option>{{ b }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>제품명 <span style="color:var(--down)">*</span><input name="name" required placeholder="예: 하수구 악취 세정 서버"></label>
+        <label>카테고리 <span style="font-weight:400;color:var(--muted2)">(자유 입력)</span>
+          <input name="category" list="categoryOptions" placeholder="예: 출시, 협찬, 공구, 테스트">
+        </label>
+        <label>일정 (오픈 예정일)<input name="date" type="date"></label>
+        <label>우선순위 <span style="font-weight:400;color:var(--muted2)">(숫자가 작을수록 우선)</span><input name="priority" type="number" min="1" step="1"></label>
+        <label class="ins-wide">제품 링크<input name="link" type="url" placeholder="상세페이지 URL (선택)"></label>
+        <label class="ins-wide">소구점 <span style="font-weight:400;color:var(--muted2)">(제품 니즈 분석 결과)</span><textarea name="selling" rows="2"></textarea></label>
+        <label>판매 시기 <span style="font-weight:400;color:var(--muted2)">(추천 월)</span><input name="timing" placeholder="예: 6월 ~ 8월"></label>
+        <label>공구 진행 시기<input name="group_buy_period" placeholder="예: 6/16 ~ 6/22"></label>
+        <label class="ins-wide">추천 근거 <span style="font-weight:400;color:var(--muted2)">(계절성·검색 수요 분석)</span><textarea name="recommend_reason" rows="2"></textarea></label>
+        <label>협찬 여부
+          <select name="sponsor_status">
+            <option value="none">해당 없음</option>
+            <option value="sponsored">협찬 (제품 제공)</option>
+            <option value="paid">유가 협찬</option>
+          </select>
+        </label>
+        <label>협찬 메모<input name="sponsor_note" placeholder="브랜드사, 조건 등"></label>
+        <label class="ins-wide">비고<textarea name="note" rows="2"></textarea></label>
+        <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">추가</button></div>
+      </form>
+    </details>
+  </div>
+
+  <datalist id="categoryOptions">
+    {% for c in suggested_categories %}<option value="{{ c }}">{% endfor %}
+  </datalist>
+
+  <form method="get" class="ins-toc-grid" style="display:grid;grid-template-columns:180px 1fr;gap:18px;margin-top:14px">
+    <div class="ins-toc">
+      <div class="ins-toc-title">목차</div>
+      <label>브랜드
+        <select name="brand" onchange="this.form.submit()">
+          <option value="">전체</option>
+          {% for b in brands %}<option value="{{ b }}" {{ 'selected' if brand==b }}>{{ b }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>카테고리
+        <select name="category" onchange="this.form.submit()">
+          <option value="">전체</option>
+          {% for c in categories %}<option value="{{ c }}" {{ 'selected' if category==c }}>{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="ins-toc-count">전체 {{ count }}건 등록됨</div>
+    </div>
+
+    <div>
+      {% for g in groups %}
+        <div class="brand-group" style="margin-bottom:22px">
+          <div class="chart-card-head" style="margin-bottom:8px"><div><h3 style="font-size:15px">{{ g.name }}</h3><div class="unit">{{ g.rows|length }}건</div></div></div>
+          <div class="chart-svg-wrap">
+            <table class="data-table">
+              <thead><tr>
+                <th>카테고리</th><th>제품</th><th>일정</th><th>우선순위</th><th>판매 시기</th><th>공구 시기</th><th>협찬</th><th>링크</th><th></th>
+              </tr></thead>
+              <tbody>
+                {% for it in g.rows %}
+                <tr>
+                  <td>{% if it.category %}<span class="ins-badge contact">{{ it.category }}</span>{% else %}-{% endif %}</td>
+                  <td>
+                    <div class="cell-primary">{{ it.name }}</div>
+                    {% if it.selling %}<div class="cell-sub">{{ it.selling }}</div>{% endif %}
+                  </td>
+                  <td>{{ it.date or '-' }}</td>
+                  <td>{{ it.priority if it.priority is not none else '-' }}</td>
+                  <td>{{ it.timing or '-' }}</td>
+                  <td>{{ it.group_buy_period or '-' }}</td>
+                  <td>
+                    {% if it.sponsor_status == 'sponsored' %}<span class="ins-badge pass">협찬</span>
+                    {% elif it.sponsor_status == 'paid' %}<span class="ins-badge warn">유가 협찬</span>
+                    {% else %}-{% endif %}
+                  </td>
+                  <td>{% if it.link %}<a href="{{ it.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+                  <td style="white-space:nowrap">
+                    <details class="folder-edit">
+                      <summary class="folder-edit-btn">✎ 수정</summary>
+                      <form method="post" action="{{ url_for('schedule.update', item_id=it.id) }}" class="ins-form-grid" style="margin-top:10px;min-width:520px">
+                        <label>브랜드 <span style="color:var(--down)">*</span>
+                          <select name="brand" required>
+                            {% for b in brands %}<option {{ 'selected' if it.brand==b }}>{{ b }}</option>{% endfor %}
+                            {% if it.brand not in brands %}<option selected>{{ it.brand }}</option>{% endif %}
+                          </select>
+                        </label>
+                        <label>제품명 <span style="color:var(--down)">*</span><input name="name" required value="{{ it.name }}"></label>
+                        <label>카테고리<input name="category" list="categoryOptions" value="{{ it.category }}"></label>
+                        <label>일정<input name="date" type="date" value="{{ it.date }}"></label>
+                        <label>우선순위<input name="priority" type="number" min="1" step="1" value="{{ it.priority if it.priority is not none else '' }}"></label>
+                        <label class="ins-wide">제품 링크<input name="link" type="url" value="{{ it.link }}"></label>
+                        <label class="ins-wide">소구점<textarea name="selling" rows="2">{{ it.selling }}</textarea></label>
+                        <label>판매 시기<input name="timing" value="{{ it.timing }}"></label>
+                        <label>공구 진행 시기<input name="group_buy_period" value="{{ it.group_buy_period }}"></label>
+                        <label class="ins-wide">추천 근거<textarea name="recommend_reason" rows="2">{{ it.recommend_reason }}</textarea></label>
+                        <label>협찬 여부
+                          <select name="sponsor_status">
+                            <option value="none" {{ 'selected' if it.sponsor_status=='none' }}>해당 없음</option>
+                            <option value="sponsored" {{ 'selected' if it.sponsor_status=='sponsored' }}>협찬 (제품 제공)</option>
+                            <option value="paid" {{ 'selected' if it.sponsor_status=='paid' }}>유가 협찬</option>
+                          </select>
+                        </label>
+                        <label>협찬 메모<input name="sponsor_note" value="{{ it.sponsor_note }}"></label>
+                        <label class="ins-wide">비고<textarea name="note" rows="2">{{ it.note }}</textarea></label>
+                        <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">저장</button></div>
+                      </form>
+                    </details>
+                    <form method="post" action="{{ url_for('schedule.delete', item_id=it.id) }}" onsubmit="return confirm('{{ it.name }} 일정을 삭제할까요?')" style="margin-top:6px">
+                      <button class="ins-del-btn" type="submit">삭제</button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% else %}
+        <div class="chart-card"><p class="note" style="text-align:center;padding:20px 0">등록된 일정이 없습니다. 위 "+ 추가"로 첫 일정을 등록해 보세요.</p></div>
+      {% endfor %}
+    </div>
+  </form>
+</div>
+{% endblock %}
