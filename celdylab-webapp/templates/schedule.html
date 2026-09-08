@@ -47,8 +47,8 @@
     {% for c in suggested_categories %}<option value="{{ c }}">{% endfor %}
   </datalist>
 
-  <form method="get" class="ins-toc-grid" style="display:grid;grid-template-columns:180px 1fr;gap:18px;margin-top:14px">
-    <div class="ins-toc">
+  <div class="ins-toc-grid" style="display:grid;grid-template-columns:180px 1fr;gap:18px;margin-top:14px">
+    <form method="get" class="ins-toc">
       <div class="ins-toc-title">목차</div>
       <label>브랜드
         <select name="brand" onchange="this.form.submit()">
@@ -63,7 +63,7 @@
         </select>
       </label>
       <div class="ins-toc-count">전체 {{ count }}건 등록됨</div>
-    </div>
+    </form>
 
     <div>
       {% for g in groups %}
@@ -137,6 +137,6 @@
         <div class="chart-card"><p class="note" style="text-align:center;padding:20px 0">등록된 일정이 없습니다. 위 "+ 추가"로 첫 일정을 등록해 보세요.</p></div>
       {% endfor %}
     </div>
-  </form>
+  </div>
 </div>
 {% endblock %}
