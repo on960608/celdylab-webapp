@@ -24,6 +24,7 @@ def init_db():
     conn.commit()
     conn.close()
     _migrate_marketplace_best_items_columns()
+    _seed_product_schedule_if_empty()
 
 
 def _migrate_marketplace_best_items_columns():
@@ -36,6 +37,39 @@ def _migrate_marketplace_best_items_columns():
         conn.execute("ALTER TABLE marketplace_best_items ADD COLUMN keyword TEXT")
     if "search_count" not in existing_cols:
         conn.execute("ALTER TABLE marketplace_best_items ADD COLUMN search_count INTEGER")
+    conn.commit()
+    conn.close()
+
+
+def _seed_product_schedule_if_empty():
+    """새로 만들어진 '브랜드 제품 일정' 표에, "브랜드 런치 플래너"에서 실제로 분석을 마친
+    항목 하나(하수구 악취 세정 서버 — 자료실의 '하수구 세정서버'와 동일 제품)만 예시로 채워둬요.
+    그 문서의 나머지 항목은 전부 "(예시)" 표시가 붙은 참고용 가짜 데이터라 실제 DB에 넣지
+    않았어요 — 진짜 일정은 이 표에서 직접 추가해 주세요. 표가 비어 있을 때만 1회 실행돼요."""
+    if count_product_schedule() > 0:
+        return
+    now = now_iso()
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO product_schedule
+            (brand, name, category, date, priority, link, selling, timing,
+             group_buy_period, recommend_reason, sponsor_status, sponsor_note, note,
+             created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "코드니처", "하수구 악취 세정 서버", "출시", "", 1,
+            "https://codenit.co.kr/product/detail.html?product_no=23",
+            "싱크대 배수구에 던져 넣기만 하면 되는 간편 사용, 거품 세정+탈취 동시 해결, 리뷰 156건 대부분 5점 · 재구매율 높음, 오늘출발 배송 가능. 1세트/2+1세트/3+2세트(BEST) 구성, 판매가 19,900원(23% 할인)",
+            "6월 ~ 8월 (초여름~한여름 순수 판매 추천)",
+            "6월 3주차 ~ 7월 1주차 진행 추천",
+            "하수구 악취는 고온다습한 환경에서 배수구 내 세균·유기물이 늘며 심해지는 계절성 문제라, 무더위가 시작되는 초여름부터 한여름(6~8월)에 관련 수요와 검색이 늘어나는 경향이 있어요 (일반 검색 결과 기반 추정치 — 정확한 월별 수치는 네이버 데이터랩 쇼핑인사이트에서 직접 확인 권장).",
+            "none", "자사몰(codenit.co.kr) 판매 상품 — 협찬 정황 없음",
+            "브랜드 런치 플래너에서 링크 분석 완료된 항목을 이어받음. 자료실의 '하수구 세정서버'와 동일 제품.",
+            "seed", now, now,
+        ),
+    )
     conn.commit()
     conn.close()
 
@@ -131,6 +165,101 @@ def upsert_archive_link(brand, product, url, updated_by):
     )
     conn.commit()
     conn.close()
+
+
+# ---------- 브랜드 제품 일정 (스케줄링 카테고리 포함) ----------
+
+def list_product_schedule(brand=None, category=None):
+    conn = get_conn()
+    query = "SELECT * FROM product_schedule WHERE 1=1"
+    params = []
+    if brand:
+        query += " AND brand = ?"
+        params.append(brand)
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+    query += " ORDER BY brand, (priority IS NULL), priority, (date = ''), date"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return rows
+
+
+def list_product_schedule_categories():
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT DISTINCT category FROM product_schedule WHERE category != '' ORDER BY category"
+    ).fetchall()
+    conn.close()
+    return [r["category"] for r in rows]
+
+
+def get_product_schedule(item_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM product_schedule WHERE id = ?", (item_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def create_product_schedule(fields, created_by):
+    conn = get_conn()
+    now = now_iso()
+    conn.execute(
+        """
+        INSERT INTO product_schedule
+            (brand, name, category, date, priority, link, selling, timing,
+             group_buy_period, recommend_reason, sponsor_status, sponsor_note, note,
+             created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            fields.get("brand", ""), fields.get("name", ""), fields.get("category", ""),
+            fields.get("date", ""), fields.get("priority"), fields.get("link", ""),
+            fields.get("selling", ""), fields.get("timing", ""), fields.get("group_buy_period", ""),
+            fields.get("recommend_reason", ""), fields.get("sponsor_status", "none"),
+            fields.get("sponsor_note", ""), fields.get("note", ""),
+            created_by, now, now,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_product_schedule(item_id, fields):
+    conn = get_conn()
+    conn.execute(
+        """
+        UPDATE product_schedule SET
+            brand = ?, name = ?, category = ?, date = ?, priority = ?, link = ?,
+            selling = ?, timing = ?, group_buy_period = ?, recommend_reason = ?,
+            sponsor_status = ?, sponsor_note = ?, note = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            fields.get("brand", ""), fields.get("name", ""), fields.get("category", ""),
+            fields.get("date", ""), fields.get("priority"), fields.get("link", ""),
+            fields.get("selling", ""), fields.get("timing", ""), fields.get("group_buy_period", ""),
+            fields.get("recommend_reason", ""), fields.get("sponsor_status", "none"),
+            fields.get("sponsor_note", ""), fields.get("note", ""),
+            now_iso(), item_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_product_schedule(item_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM product_schedule WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+
+
+def count_product_schedule():
+    conn = get_conn()
+    n = conn.execute("SELECT COUNT(*) AS n FROM product_schedule").fetchone()["n"]
+    conn.close()
+    return n
 
 
 # ---------- 시딩 인사이트 ----------
