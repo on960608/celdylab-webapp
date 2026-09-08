@@ -185,6 +185,7 @@ from listup import listup_bp
 from trend import trend_bp
 from giveaway import giveaway_bp
 from igcomments import igcomments_bp
+from schedule import schedule_bp
 
 app.register_blueprint(insight_bp)
 app.register_blueprint(gongu_bp)
@@ -192,6 +193,7 @@ app.register_blueprint(listup_bp)
 app.register_blueprint(trend_bp)
 app.register_blueprint(giveaway_bp)
 app.register_blueprint(igcomments_bp)
+app.register_blueprint(schedule_bp)
 
 
 # ---------------------------------------------------------------------------
