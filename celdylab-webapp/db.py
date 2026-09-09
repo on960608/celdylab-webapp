@@ -5,6 +5,7 @@
 """
 import sqlite3
 import os
+import uuid
 from datetime import datetime, timezone
 
 DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "celdylab.db"))
@@ -645,5 +646,116 @@ def get_giveaway_event(event_id):
 def delete_giveaway_event(event_id):
     conn = get_conn()
     conn.execute("DELETE FROM giveaway_events WHERE id = ?", (event_id,))
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 브랜드 런치 플래너 — 테스트 일정표 / 캘린더 전용 일정 / 네이버 트렌드 스냅샷
+# (제품 우선순위 표는 product_schedule 테이블 함수들을 그대로 써요. 여긴 그 화면의
+# 나머지 탭들만 담당해요)
+# ---------------------------------------------------------------------------
+
+def _new_id(prefix):
+    return prefix + uuid.uuid4().hex[:12]
+
+
+_SCHEDULE_TEST_FIELDS = ("brand", "product", "item", "date", "status", "assignee", "note")
+
+
+def list_schedule_tests():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM schedule_tests ORDER BY date, id").fetchall()
+    conn.close()
+    return rows
+
+
+def create_schedule_test(data):
+    conn = get_conn()
+    now = now_iso()
+    new_id = _new_id("t")
+    row = {k: data.get(k, "") for k in _SCHEDULE_TEST_FIELDS}
+    conn.execute(
+        """INSERT INTO schedule_tests (id, brand, product, item, date, status, assignee, note, created_at, updated_at)
+           VALUES (:id, :brand, :product, :item, :date, :status, :assignee, :note, :created_at, :updated_at)""",
+        {**row, "id": new_id, "created_at": now, "updated_at": now},
+    )
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def delete_schedule_test(test_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM schedule_tests WHERE id = ?", (test_id,))
+    conn.commit()
+    conn.close()
+
+
+def list_schedule_events():
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM schedule_events ORDER BY date, id").fetchall()
+    conn.close()
+    return rows
+
+
+def create_schedule_event(data):
+    conn = get_conn()
+    new_id = _new_id("e")
+    conn.execute(
+        """INSERT INTO schedule_events (id, title, date, brand, note, created_at)
+           VALUES (:id, :title, :date, :brand, :note, :created_at)""",
+        {
+            "id": new_id, "title": data.get("title", ""), "date": data.get("date", ""),
+            "brand": data.get("brand", ""), "note": data.get("note", ""), "created_at": now_iso(),
+        },
+    )
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def delete_schedule_event(event_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM schedule_events WHERE id = ?", (event_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_schedule_trend_snapshot():
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM schedule_trend_snapshot WHERE id = 1").fetchone()
+    conn.close()
+    return row
+
+
+def save_schedule_trend_snapshot(snapshot):
+    """snapshot: {category, range_label, mobile_pct, desktop_pct, female_pct, male_pct,
+    age_group, keywords(list[str]), series(list[{date,ratio}])} — naver_datalab.fetch_trend_snapshot()
+    가 돌려주는 그대로 넣으면 돼요."""
+    import json
+
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO schedule_trend_snapshot
+             (id, category, range_label, updated_at, mobile_pct, desktop_pct, female_pct, male_pct, age_group, keywords, series)
+           VALUES (1, :category, :range_label, :updated_at, :mobile_pct, :desktop_pct, :female_pct, :male_pct, :age_group, :keywords, :series)
+           ON CONFLICT(id) DO UPDATE SET
+             category=excluded.category, range_label=excluded.range_label, updated_at=excluded.updated_at,
+             mobile_pct=excluded.mobile_pct, desktop_pct=excluded.desktop_pct, female_pct=excluded.female_pct,
+             male_pct=excluded.male_pct, age_group=excluded.age_group, keywords=excluded.keywords, series=excluded.series""",
+        {
+            "category": snapshot.get("category", ""),
+            "range_label": snapshot.get("range_label", ""),
+            "updated_at": now_iso()[:10].replace("-", "."),
+            "mobile_pct": snapshot.get("mobile_pct"),
+            "desktop_pct": snapshot.get("desktop_pct"),
+            "female_pct": snapshot.get("female_pct"),
+            "male_pct": snapshot.get("male_pct"),
+            "age_group": snapshot.get("age_group", ""),
+            "keywords": ", ".join(snapshot.get("keywords") or []),
+            "series": json.dumps(snapshot.get("series") or [], ensure_ascii=False),
+        },
+    )
     conn.commit()
     conn.close()
