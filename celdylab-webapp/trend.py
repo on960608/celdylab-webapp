@@ -138,7 +138,13 @@ def _run_marketplace_naver_scrape():
 def index():
     _maybe_auto_scrape_on_load()
     _maybe_auto_scrape_marketplace_on_load()
-    records = [dict(r) for r in db.list_trend_records()]
+    # 청소/주방용품/세탁 카테고리만 다뤄요 — 이전에(카테고리 제한 전) 등록된 기록이나
+    # 외부 자동화 API로 들어온 다른 카테고리 기록이 남아있어도 화면에는 노출하지 않아요.
+    allowed_categories = set(TREND_CATEGORIES)
+    records = [
+        dict(r) for r in db.list_trend_records()
+        if (r["category"] or "").strip() in allowed_categories
+    ]
 
     # 인기 셀러 분석 — 셀러별로 묶어서 등록 횟수 순 나열
     seller_groups = {}

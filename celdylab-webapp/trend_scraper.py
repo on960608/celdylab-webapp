@@ -31,6 +31,8 @@ from datetime import date
 import requests
 from bs4 import BeautifulSoup
 
+from analysis import classify_trend_category
+
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -121,13 +123,19 @@ def fetch_82market(limit=20):
         )
         if not seller:
             continue
+        product = h3.get_text(strip=True)
+        # 이 사이트는 카테고리 라벨을 아예 안 줘서, 제품명 키워드로 청소/주방용품/세탁
+        # 여부를 판단해요 — 셋 다 아니면 대상이 아니라는 뜻이라 등록하지 않아요.
+        category = classify_trend_category(product)
+        if not category:
+            continue
         seen.add(href)
         items.append({
             "check_date": date.today().isoformat(),
             "platform": "82market",
             "seller": seller,
-            "product": h3.get_text(strip=True),
-            "category": "",
+            "product": product,
+            "category": category,
             "price": 0,
             "link": "https://www.82market.com" + href,
             "rank": rank_of.get(seller.strip(), 999),
@@ -187,6 +195,12 @@ def fetch_09now(limit=20):
         if not seller:
             continue
 
+        # 이 사이트도 카테고리 라벨을 안 줘서, 제품명 키워드로 청소/주방용품/세탁 여부를
+        # 판단해요 — 셋 다 아니면 대상이 아니라는 뜻이라 등록하지 않아요.
+        category = classify_trend_category(product)
+        if not category:
+            continue
+
         seen.add(href)
         link = href if href.startswith("http") else "https://www.09now.com" + href
         records.append({
@@ -194,7 +208,7 @@ def fetch_09now(limit=20):
             "platform": "지금하는공구",
             "seller": seller,
             "product": product,
-            "category": "",
+            "category": category,
             "price": price,
             "link": link,
         })
@@ -214,24 +228,6 @@ def fetch_09now(limit=20):
 
 _DATE_RE = re.compile(r"^\d{4}/\d{2}/\d{2}$")
 _DIGITS_RE = re.compile(r"^[\d,]+$")
-
-_09MORE_CATEGORY_MAP = {
-    "가전": "생활용품", "전기용품": "생활용품", "생활/건강": "생활용품",
-    "주방": "주방용품",
-    "패션": "패션잡화", "의류": "패션잡화",
-    "침구류": "홈인테리어",
-    "여행": "여행",
-}
-
-# 요청에 따라 이 원본 카테고리(사이트에 표시된 그대로의 값)에 해당하는 상품은
-# 아예 등록하지 않아요. "뷰티"는 매핑표에 없어서 원래 "기타"로 뭉뚱그려졌지만,
-# 걸러내려면 매핑 전 원본 값 기준으로 판단해야 해요.
-_09MORE_EXCLUDED_RAW_CATEGORIES = {"여행", "뷰티"}
-
-
-def _map_09more_category(raw):
-    return _09MORE_CATEGORY_MAP.get(raw, "기타")
-
 
 # 카드 안에 상품명·셀러명·카테고리 말고도 섞여 나올 수 있는 상태 배지 텍스트 — 카테고리로
 # 잘못 인식되지 않도록 걸러내요.
@@ -284,9 +280,11 @@ def fetch_09more(limit=20):
         # (중간에 예상 못 한 배지 텍스트가 하나 더 끼어들어도) 더 안전해요.
         product, seller = rest[0], rest[1]
         raw_category = rest[-1] if len(rest) > 2 else None
-        if raw_category in _09MORE_EXCLUDED_RAW_CATEGORIES:
+        # 사이트 원본 카테고리 라벨 + 제품명 키워드로 청소/주방용품/세탁 여부를 판단해요 —
+        # 셋 다 아니면(여행·뷰티·패션·가전 등) 대상이 아니라는 뜻이라 등록하지 않아요.
+        category = classify_trend_category(product, raw_category)
+        if not category:
             continue
-        category = _map_09more_category(raw_category) if raw_category else "기타"
 
         key = (product, seller)
         if key in seen:
@@ -317,14 +315,6 @@ def fetch_09more(limit=20):
 # ---------------------------------------------------------------------------
 
 _09PANGPANG_STATUS_RE = re.compile(r"^(오늘|내일|어제|\d+일\s*(전|후))\s*(\d+시\s*)?오픈(\s*예정)?$")
-
-_09PANGPANG_CATEGORY_MAP = {
-    "주방용품": "주방용품", "주방가전": "주방용품",
-    "생활용품": "생활용품", "생활가전": "생활용품", "청소/세제": "생활용품", "육아용품": "생활용품",
-    "의류": "패션잡화", "신발": "패션잡화", "액세서리": "패션잡화",
-}
-# 요청에 따라 이 대분류 카테고리는 아예 등록하지 않아요.
-_09PANGPANG_EXCLUDED_MAIN_CATEGORIES = {"뷰티", "여행"}
 
 
 def _is_09pangpang_card(tag):
@@ -366,7 +356,10 @@ def fetch_09pangpang(limit=20):
             sub_category = group[-2] if len(group) >= 3 else None
             group = []
 
-            if main_category in _09PANGPANG_EXCLUDED_MAIN_CATEGORIES:
+            # 사이트 대/소분류 라벨 + 제품명 키워드로 청소/주방용품/세탁 여부를 판단해요 —
+            # 셋 다 아니면(뷰티·여행·패션·육아 등) 대상이 아니라는 뜻이라 등록하지 않아요.
+            category = classify_trend_category(product, f"{main_category or ''} {sub_category or ''}")
+            if not category:
                 continue
 
             key = (seller, product)
@@ -379,7 +372,7 @@ def fetch_09pangpang(limit=20):
                 "platform": "공구팡팡",
                 "seller": seller,
                 "product": product,
-                "category": _09PANGPANG_CATEGORY_MAP.get(sub_category, "기타"),
+                "category": category,
                 "price": 0,
                 "link": link,
             })
@@ -400,22 +393,25 @@ def fetch_09pangpang(limit=20):
 
 _MOMCALENDAR_SELLER_RE = re.compile(r"^(.*?)\s*·\s*\d{4}-\d{2}-\d{2}")
 
-# 요청에 따라 뷰티·여행 카테고리 페이지는 목록에서 아예 빼요.
+# 요청에 따라 뷰티·여행 카테고리 페이지는 목록에서 아예 빼요. 나머지 페이지는 그대로
+# 요청하되, 각 상품이 실제로 청소/주방용품/세탁인지는 페이지 라벨을 힌트 삼아 제품명
+# 키워드로 다시 판단해요(예: "식품공구" 페이지에도 주방세제 같은 상품이 섞여 나올 수
+# 있어서, 페이지 라벨만으로 등록/제외를 정하지 않아요).
 _MOMCALENDAR_CATEGORIES = {
-    "가전공구": "생활용품",
-    "식품공구": "기타",
-    "육아공구": "기타",
+    "가전공구": "가전",
+    "식품공구": "식품",
+    "육아공구": "육아",
     "리빙공구": "리빙",
-    "패션공구": "패션잡화",
-    "건강공구": "기타",
-    "반려동물공구": "기타",
+    "패션공구": "패션",
+    "건강공구": "건강",
+    "반려동물공구": "반려동물",
 }
 
 
 def fetch_momcalendar(limit=20):
     records = []
     seen = set()
-    for slug, category in _MOMCALENDAR_CATEGORIES.items():
+    for slug, category_hint in _MOMCALENDAR_CATEGORIES.items():
         if len(records) >= limit:
             break
         try:
@@ -432,6 +428,10 @@ def fetch_momcalendar(limit=20):
             m = _MOMCALENDAR_SELLER_RE.match(span_text)
             seller = m.group(1).strip() if m else ""
             if not product or not seller:
+                continue
+
+            category = classify_trend_category(product, category_hint)
+            if not category:
                 continue
 
             key = (seller, product)
