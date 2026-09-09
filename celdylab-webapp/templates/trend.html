@@ -77,41 +77,43 @@
       <p class="note" style="margin-top:12px"><form method="post" action="{{ url_for('trend.clear') }}" onsubmit="return confirm('전체 삭제할까요?')"><button class="refresh-btn" type="submit">전체 초기화</button></form></p>
     </div>
 
-    <div class="chart-card" style="margin-bottom:16px">
-      <div class="chart-card-head"><div><h3>인기 셀러 분석</h3><div class="unit">등록된 셀러 데이터를 셀러별로 묶어 등록 횟수·확인된 플랫폼 수·평균 공구가 순으로 나열해요.</div></div></div>
-      <div class="top10-list">
-        {% for s in popular_sellers %}
-          <div class="top10-row">
-            <span class="top10-rank">{{ loop.index }}</span>
-            <div class="top10-info">
-              <div class="top10-name">{{ s.seller }}</div>
-              <div class="top10-sub">{{ s.category }} · {{ s.platform_count }}개 플랫폼에서 확인</div>
+    <div class="trend-split-grid">
+      <div class="chart-card">
+        <div class="chart-card-head"><div><h3>인기 셀러 분석</h3><div class="unit">등록된 셀러 데이터를 셀러별로 묶어 등록 횟수·확인된 플랫폼 수·평균 공구가 순으로 나열해요.</div></div></div>
+        <div class="top10-list scrollable">
+          {% for s in popular_sellers %}
+            <div class="top10-row">
+              <span class="top10-rank">{{ loop.index }}</span>
+              <div class="top10-info">
+                <div class="top10-name">{{ s.seller }}</div>
+                <div class="top10-sub">{{ s.category }} · {{ s.platform_count }}개 플랫폼에서 확인</div>
+              </div>
+              <div class="top10-meta">
+                <span class="top10-metric rank">{{ s.count }}회 등록</span>
+                <span class="top10-metric" style="font-weight:600;font-size:11px;color:var(--muted)">{{ '{:,}'.format(s.avg_price|round|int) + '원' if s.avg_price is not none else '가격 정보 없음' }}</span>
+                {% if s.link %}<a href="{{ s.link }}" target="_blank" rel="noopener">열기 ↗</a>{% endif %}
+              </div>
             </div>
-            <div class="top10-meta">
-              <span class="top10-metric rank">{{ s.count }}회 등록</span>
-              <span class="top10-metric" style="font-weight:600;font-size:11px;color:var(--muted)">{{ '{:,}'.format(s.avg_price|round|int) + '원' if s.avg_price is not none else '가격 정보 없음' }}</span>
-              {% if s.link %}<a href="{{ s.link }}" target="_blank" rel="noopener">열기 ↗</a>{% endif %}
-            </div>
-          </div>
-        {% else %}
-          <p class="note" style="margin:0">셀러를 등록하면 인기 셀러 분석이 여기에 나열됩니다.</p>
-        {% endfor %}
+          {% else %}
+            <p class="note" style="margin:0">셀러를 등록하면 인기 셀러 분석이 여기에 나열됩니다.</p>
+          {% endfor %}
+        </div>
       </div>
-    </div>
 
-    <div class="chart-card">
-      <div class="chart-card-head"><div><h3>카테고리별 소구 인사이트</h3><div class="unit">등록된 인기 셀러 데이터를 카테고리 기준으로 총합·평균 집계한 결과예요.</div></div></div>
-      <div class="chart-svg-wrap">
-        <table class="data-table">
-          <thead><tr><th>카테고리</th><th>등록 건수</th><th>평균 공구가</th><th>확인된 플랫폼 수</th></tr></thead>
-          <tbody>
-            {% for c in category_insights %}
-            <tr><td>{{ c.category }}</td><td>{{ c.count }}건</td><td>{{ ('{:,}'.format(c.avg_price|round|int) + '원') if c.avg_price is not none else '-' }}</td><td>{{ c.platform_count }} / {{ platforms|length }}개</td></tr>
-            {% else %}
-            <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">인기 셀러를 등록하면 카테고리별 집계가 표시됩니다.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="chart-card">
+        <div class="chart-card-head"><div><h3>카테고리별 소구 인사이트</h3><div class="unit">등록된 인기 셀러 데이터를 카테고리 기준으로 총합·평균 집계한 결과예요.</div></div></div>
+        <div class="chart-svg-wrap">
+          <table class="data-table">
+            <thead><tr><th>카테고리</th><th>등록 건수</th><th>평균 공구가</th><th>확인된 플랫폼 수</th></tr></thead>
+            <tbody>
+              {% for c in category_insights %}
+              <tr><td>{{ c.category }}</td><td>{{ c.count }}건</td><td>{{ ('{:,}'.format(c.avg_price|round|int) + '원') if c.avg_price is not none else '-' }}</td><td>{{ c.platform_count }} / {{ platforms|length }}개</td></tr>
+              {% else %}
+              <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">인기 셀러를 등록하면 카테고리별 집계가 표시됩니다.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -212,7 +214,7 @@
 
     <div class="mp-panel" data-platform="쿠팡" hidden>
       <div class="chart-card" style="margin-bottom:16px">
-        <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">쿠팡 베스트 · 수동 업로드</div><h3>HAR 파일로 쿠팡 순위 올리기</h3><div class="unit">쿠팡은 자동화 도구 접속이 막혀 있고 공식 검색량 API도 없어서, 직접 로그인한 브라우저에서 저장한 HAR 파일을 올려서 순위를 반영해요(검색수 없이 쿠팡 자체 순위만 표시돼요).</div></div></div>
+        <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">쿠팡 베스트 · 수동 업로드</div><h3>HAR 파일로 쿠팡 순위 올리기</h3><div class="unit">쿠팡,�� 자동화 도구 접속이 막혀 있고 공식 검색량 API도 없어서, 직접 로그인한 브라우저에서 저장한 HAR 파일을 올려서 순위를 반영해요(검색수 없이 쿠팡 자체 순위만 표시돼요).</div></div></div>
         <ol class="note" style="margin:0 0 12px;padding-left:18px">
           <li>크롬에서 쿠팡에 로그인 → 반영하고 싶은 카테고리의 베스트/랭킹 페이지로 이동해요.</li>
           <li>상품이 다 보이도록 페이지를 끝까지 스크롤해요.</li>
