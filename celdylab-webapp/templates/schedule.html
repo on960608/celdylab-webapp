@@ -1,142 +1,397 @@
 {% extends "base.html" %}
-{% block title %}브랜드 제품 일정 · 셀디랩 콘텐츠팀{% endblock %}
+{% block title %}브랜드 런치 플래너 · 셀디랩 콘텐츠팀{% endblock %}
 {% block content %}
+<style>
+  /* 브랜드 런치 플래너 전용 스타일 — 브랜드 색상・캘린더・막대그래프는 site 전역 style.css에
+     아직 없어서 여기서만 써요. */
+  .brand-group { }
+  .cell-primary { font-weight: 700; color: var(--ink); }
+  .cell-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .sch-brand-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; flex: none; }
+  .sch-bar-wrap { display: flex; align-items: flex-end; gap: 3px; height: 74px; margin-top: 14px; }
+  .sch-bar { flex: 1; min-width: 3px; background: var(--accent); border-radius: 2px 2px 0 0; opacity: .75; }
+  .sch-keyword-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .sch-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .sch-cal-nav { display: flex; gap: 6px; align-items: center; }
+  .sch-cal-nav button { font-family: inherit; cursor: pointer; border: 1px solid var(--line2); background: var(--panel-soft); color: var(--ink); font-weight: 800; font-size: 12px; padding: 6px 11px; border-radius: 8px; }
+  .sch-cal-nav button:hover { background: var(--accent-soft); color: var(--accent-deep); }
+  .sch-cal-title { font-size: 15px; font-weight: 800; }
+  .sch-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .sch-cal-dow { text-align: center; font-size: 11px; font-weight: 800; color: var(--muted2); padding-bottom: 4px; }
+  .sch-cal-cell { min-height: 78px; border: 1px solid var(--line); border-radius: 9px; padding: 5px 6px; background: var(--panel-soft); display: flex; flex-direction: column; gap: 3px; }
+  .sch-cal-cell.sch-cal-outside { opacity: .35; }
+  .sch-cal-cell.sch-cal-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .sch-cal-daynum { font-size: 11px; font-weight: 800; color: var(--muted); }
+  .sch-cal-evt { font-size: 10px; font-weight: 700; padding: 2px 5px; border-radius: 5px; color: #fff; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sch-cal-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 11.5px; color: var(--muted); }
+  .sch-cal-legend span { display: inline-flex; align-items: center; }
+</style>
+
 <div class="block-head">
   <div class="eyebrow">SCHEDULING · PRODUCT LAUNCH</div>
-  <h2>브랜드 제품 일정</h2>
-  <p>브랜드별 제품의 출시·공구·협찬·테스트 일정을 "카테고리"로 분류해서 한 표에서 관리해요. 실제 DB에 저장되어 팀 전체 화면에 실시간으로 공유됩니다.</p>
+  <h2>브랜드 런치 플래너</h2>
+  <p>브랜드별 제품의 출시·공구·협찬·테스트 일정, 캘린더, 네이버 트렌드를 한 곳에서 관리해요. 실제 DB에 저장되어 팀 전체 화면에 실시간으로 공유됩니다.</p>
 </div>
 
-<div class="chart-card" style="margin-bottom:16px">
-  <div class="chart-card-head" style="align-items:center">
-    <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>일정 추가</h3></div>
-    <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 추가</summary>
-      <form method="post" action="{{ url_for('schedule.add') }}" class="ins-form-grid" style="margin-top:12px">
-        <label>브랜드 <span style="color:var(--down)">*</span>
-          <select name="brand" required>
-            <option value="">선택</option>
-            {% for b in brands %}<option>{{ b }}</option>{% endfor %}
-          </select>
-        </label>
-        <label>제품명 <span style="color:var(--down)">*</span><input name="name" required placeholder="예: 하수구 악취 세정 서버"></label>
-        <label>카테고리 <span style="font-weight:400;color:var(--muted2)">(자유 입력)</span>
-          <input name="category" list="categoryOptions" placeholder="예: 출시, 협찬, 공구, 테스트">
-        </label>
-        <label>일정 (오픈 예정일)<input name="date" type="date"></label>
-        <label>우선순위 <span style="font-weight:400;color:var(--muted2)">(숫자가 작을수록 우선)</span><input name="priority" type="number" min="1" step="1"></label>
-        <label class="ins-wide">제품 링크<input name="link" type="url" placeholder="상세페이지 URL (선택)"></label>
-        <label class="ins-wide">소구점 <span style="font-weight:400;color:var(--muted2)">(제품 니즈 분석 결과)</span><textarea name="selling" rows="2"></textarea></label>
-        <label>판매 시기 <span style="font-weight:400;color:var(--muted2)">(추천 월)</span><input name="timing" placeholder="예: 6월 ~ 8월"></label>
-        <label>공구 진행 시기<input name="group_buy_period" placeholder="예: 6/16 ~ 6/22"></label>
-        <label class="ins-wide">추천 근거 <span style="font-weight:400;color:var(--muted2)">(계절성·검색 수요 분석)</span><textarea name="recommend_reason" rows="2"></textarea></label>
-        <label>협찬 여부
-          <select name="sponsor_status">
-            <option value="none">해당 없음</option>
-            <option value="sponsored">협찬 (제품 제공)</option>
-            <option value="paid">유가 협찬</option>
-          </select>
-        </label>
-        <label>협찬 메모<input name="sponsor_note" placeholder="브랜드사, 조건 등"></label>
-        <label class="ins-wide">비고<textarea name="note" rows="2"></textarea></label>
-        <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">추가</button></div>
-      </form>
-    </details>
+<div class="guide-tabs-wrap">
+  <div class="subtab-bar" id="sch-main-tabs" role="tablist" aria-label="브랜드 런치 플래너 탭">
+    <button class="subtab" type="button" data-step="trend">네이버 트렌드</button>
+    <button class="subtab" type="button" data-step="calendar">캘린더</button>
+    <button class="subtab active" type="button" data-step="products">제품 우선순위 표</button>
+    <button class="subtab" type="button" data-step="tests">테스트 일정표</button>
   </div>
 
-  <datalist id="categoryOptions">
-    {% for c in suggested_categories %}<option value="{{ c }}">{% endfor %}
-  </datalist>
+  <!-- ============ 네이버 트렌드 ============ -->
+  <div class="step-guide" data-step="trend">
+    {% if datalab_configured %}
+      <div class="chart-card" style="margin-bottom:16px;background:rgba(31,157,99,.08);border-color:rgba(31,157,99,.3)">
+        <p class="note" style="margin:0;color:var(--up)">✓ 네이버 데이터랩 API 연동이 켜져 있어요. 아래 "⚡ 자동 새로고침"을 누르면 최신 클릭량 추이·인기 검색어를 바로 가져와요.</p>
+      </div>
+    {% else %}
+      <div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+        <p class="note" style="margin:0">⚠ 네이버 API 키가 아직 설정되지 않았어요. <code>NAVER_SHOPPING_CLIENT_ID</code> / <code>NAVER_SHOPPING_CLIENT_SECRET</code> 환경변수를 등록하면 자동 새로고침을 쓸 수 있어요 (지금은 아래 스냅샷만 확인 가능해요).</p>
+      </div>
+    {% endif %}
 
-  <div class="ins-toc-grid" style="display:grid;grid-template-columns:180px 1fr;gap:18px;margin-top:14px">
-    <form method="get" class="ins-toc">
-      <div class="ins-toc-title">목차</div>
-      <label>브랜드
-        <select name="brand" onchange="this.form.submit()">
-          <option value="">전체</option>
-          {% for b in brands %}<option value="{{ b }}" {{ 'selected' if brand==b }}>{{ b }}</option>{% endfor %}
-        </select>
-      </label>
-      <label>카테고리
-        <select name="category" onchange="this.form.submit()">
-          <option value="">전체</option>
-          {% for c in categories %}<option value="{{ c }}" {{ 'selected' if category==c }}>{{ c }}</option>{% endfor %}
-        </select>
-      </label>
-      <div class="ins-toc-count">전체 {{ count }}건 등록됨</div>
-    </form>
-
-    <div>
-      {% for g in groups %}
-        <div class="brand-group" style="margin-bottom:22px">
-          <div class="chart-card-head" style="margin-bottom:8px"><div><h3 style="font-size:15px">{{ g.name }}</h3><div class="unit">{{ g.rows|length }}건</div></div></div>
-          <div class="chart-svg-wrap">
-            <table class="data-table">
-              <thead><tr>
-                <th>카테고리</th><th>제품</th><th>일정</th><th>우선순위</th><th>판매 시기</th><th>공구 시기</th><th>협찬</th><th>링크</th><th></th>
-              </tr></thead>
-              <tbody>
-                {% for it in g.rows %}
-                <tr>
-                  <td>{% if it.category %}<span class="ins-badge contact">{{ it.category }}</span>{% else %}-{% endif %}</td>
-                  <td>
-                    <div class="cell-primary">{{ it.name }}</div>
-                    {% if it.selling %}<div class="cell-sub">{{ it.selling }}</div>{% endif %}
-                  </td>
-                  <td>{{ it.date or '-' }}</td>
-                  <td>{{ it.priority if it.priority is not none else '-' }}</td>
-                  <td>{{ it.timing or '-' }}</td>
-                  <td>{{ it.group_buy_period or '-' }}</td>
-                  <td>
-                    {% if it.sponsor_status == 'sponsored' %}<span class="ins-badge pass">협찬</span>
-                    {% elif it.sponsor_status == 'paid' %}<span class="ins-badge warn">유가 협찬</span>
-                    {% else %}-{% endif %}
-                  </td>
-                  <td>{% if it.link %}<a href="{{ it.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
-                  <td style="white-space:nowrap">
-                    <details class="folder-edit">
-                      <summary class="folder-edit-btn">✎ 수정</summary>
-                      <form method="post" action="{{ url_for('schedule.update', item_id=it.id) }}" class="ins-form-grid" style="margin-top:10px;min-width:520px">
-                        <label>브랜드 <span style="color:var(--down)">*</span>
-                          <select name="brand" required>
-                            {% for b in brands %}<option {{ 'selected' if it.brand==b }}>{{ b }}</option>{% endfor %}
-                            {% if it.brand not in brands %}<option selected>{{ it.brand }}</option>{% endif %}
-                          </select>
-                        </label>
-                        <label>제품명 <span style="color:var(--down)">*</span><input name="name" required value="{{ it.name }}"></label>
-                        <label>카테고리<input name="category" list="categoryOptions" value="{{ it.category }}"></label>
-                        <label>일정<input name="date" type="date" value="{{ it.date }}"></label>
-                        <label>우선순위<input name="priority" type="number" min="1" step="1" value="{{ it.priority if it.priority is not none else '' }}"></label>
-                        <label class="ins-wide">제품 링크<input name="link" type="url" value="{{ it.link }}"></label>
-                        <label class="ins-wide">소구점<textarea name="selling" rows="2">{{ it.selling }}</textarea></label>
-                        <label>판매 시기<input name="timing" value="{{ it.timing }}"></label>
-                        <label>공구 진행 시기<input name="group_buy_period" value="{{ it.group_buy_period }}"></label>
-                        <label class="ins-wide">추천 근거<textarea name="recommend_reason" rows="2">{{ it.recommend_reason }}</textarea></label>
-                        <label>협찬 여부
-                          <select name="sponsor_status">
-                            <option value="none" {{ 'selected' if it.sponsor_status=='none' }}>해당 없음</option>
-                            <option value="sponsored" {{ 'selected' if it.sponsor_status=='sponsored' }}>협찬 (제품 제공)</option>
-                            <option value="paid" {{ 'selected' if it.sponsor_status=='paid' }}>유가 협찬</option>
-                          </select>
-                        </label>
-                        <label>협찬 메모<input name="sponsor_note" value="{{ it.sponsor_note }}"></label>
-                        <label class="ins-wide">비고<textarea name="note" rows="2">{{ it.note }}</textarea></label>
-                        <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">저장</button></div>
-                      </form>
-                    </details>
-                    <form method="post" action="{{ url_for('schedule.delete', item_id=it.id) }}" onsubmit="return confirm('{{ it.name }} 일정을 삭제할까요?')" style="margin-top:6px">
-                      <button class="ins-del-btn" type="submit">삭제</button>
-                    </form>
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-card-head" style="align-items:center">
+        <div><div class="eyebrow" style="margin-bottom:4px">생활/건강 카테고리</div><h3>클릭량 추이 · 인기 검색어</h3>
+          {% if trend_snapshot %}<div class="unit">{{ trend_snapshot.range_label }} · 마지막 업데이트 {{ trend_snapshot.updated_at }}</div>{% endif %}
         </div>
+        <form method="post" action="{{ url_for('schedule.trend_refresh') }}">
+          <button class="refresh-btn" type="submit" {{ 'disabled' if not datalab_configured }} title="네이버 데이터랩 API를 다시 호출해서 스냅샷을 통째로 교체해요.">⚡ 자동 새로고침</button>
+        </form>
+      </div>
+
+      {% if trend_snapshot %}
+      <div class="sch-bar-wrap" title="{{ trend_snapshot.range_label }} 일별 클릭량 추이 (상대지수)">
+        {% for s in trend_snapshot.series %}<div class="sch-bar" style="height:{{ s.pct }}%" title="{{ s.date }} · {{ s.ratio }}"></div>{% endfor %}
+      </div>
+
+      <div class="stat-row" style="margin-top:16px">
+        <div class="stat-tile"><span class="label">기기</span><strong>모바일 {{ trend_snapshot.mobile_pct if trend_snapshot.mobile_pct is not none else '-' }}%</strong><span class="unit">PC {{ trend_snapshot.desktop_pct if trend_snapshot.desktop_pct is not none else '-' }}%</span></div>
+        <div class="stat-tile"><span class="label">성별</span><strong>여성 {{ trend_snapshot.female_pct if trend_snapshot.female_pct is not none else '-' }}%</strong><span class="unit">남성 {{ trend_snapshot.male_pct if trend_snapshot.male_pct is not none else '-' }}%</span></div>
+        <div class="stat-tile"><span class="label">주 관심 연령대</span><strong>{{ trend_snapshot.age_group or '-' }}</strong></div>
+      </div>
+
+      <div class="sch-keyword-wrap">
+        {% for kw in trend_snapshot.keyword_list %}<span class="ins-tag">{{ loop.index }}. {{ kw }}</span>{% else %}<span class="note">인기 검색어 데이터가 없어요.</span>{% endfor %}
+      </div>
+      <p class="note">인기 검색어 TOP{{ trend_snapshot.keyword_list|length }} · "배수구 냄새" 같은 특정 키워드가 아니라 생활/건강 카테고리 전체 추이예요.</p>
       {% else %}
-        <div class="chart-card"><p class="note" style="text-align:center;padding:20px 0">등록된 일정이 없습니다. 위 "+ 추가"로 첫 일정을 등록해 보세요.</p></div>
-      {% endfor %}
+      <p class="note" style="margin-top:14px">아직 저장된 트렌드 스냅샷이 없어요. 위 "⚡ 자동 새로고침" 버튼을 눌러서 처음 데이터를 가져와 주세요.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ============ 캘린더 ============ -->
+  <div class="step-guide" data-step="calendar">
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="sch-cal-head">
+        <div class="sch-cal-title" id="sch-cal-title"></div>
+        <div class="sch-cal-nav">
+          <button type="button" id="sch-cal-prev">‹ 이전</button>
+          <button type="button" id="sch-cal-today">오늘</button>
+          <button type="button" id="sch-cal-next">다음 ›</button>
+        </div>
+      </div>
+      <div class="sch-cal-grid" id="sch-cal-dow"></div>
+      <div class="sch-cal-grid" id="sch-cal-body" style="margin-top:5px"></div>
+      <div class="sch-cal-legend">
+        {% for b in brands %}<span><span class="sch-brand-dot" style="background:{{ brand_colors.get(b, 'var(--muted2)') }}"></span>{{ b }}</span>{% endfor %}
+        <span><span class="sch-brand-dot" style="background:var(--muted2)"></span>기타 / 전체 일정</span>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-card-head" style="align-items:center">
+        <div><div class="eyebrow" style="margin-bottom:4px">EVENTS</div><h3>캘린더 전용 일정</h3><div class="unit">제품·테스트에 속하지 않는 일정(회의, 마감일 등)이에요.</div></div>
+        <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 일정 추가</summary>
+          <form method="post" action="{{ url_for('schedule.events_save') }}" class="ins-form-grid" style="margin-top:12px">
+            <label class="ins-wide">제목<input name="title" placeholder="예: 브랜드 4사 합동 회의" required></label>
+            <label>날짜<input name="date" type="date" required></label>
+            <label>브랜드(선택)<select name="brand"><option value="">전체</option>{% for b in brands %}<option value="{{ b }}">{{ b }}</option>{% endfor %}</select></label>
+            <label class="ins-wide">비고<input name="note" placeholder="선택 입력"></label>
+            <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">추가</button></div>
+          </form>
+        </details>
+      </div>
+      <div class="chart-svg-wrap">
+        <table class="data-table">
+          <thead><tr><th>날짜</th><th>제목</th><th>브랜드</th><th>비고</th><th></th></tr></thead>
+          <tbody>
+            {% for e in events %}
+            <tr>
+              <td>{{ e.date }}</td><td>{{ e.title }}</td><td>{{ e.brand or '전체' }}</td><td>{{ e.note or '-' }}</td>
+              <td><form method="post" action="{{ url_for('schedule.events_delete', event_id=e.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 일정이 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 제품 우선순위 표 ============ -->
+  <div class="step-guide active" data-step="products">
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-card-head" style="align-items:center">
+        <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>일정 추가</h3></div>
+        <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 추가</summary>
+          <form method="post" action="{{ url_for('schedule.add') }}" class="ins-form-grid" style="margin-top:12px">
+            <label>브랜드 <span style="color:var(--down)">*</span>
+              <select name="brand" required>
+                <option value="">선택</option>
+                {% for b in brands %}<option>{{ b }}</option>{% endfor %}
+              </select>
+            </label>
+            <label>제품명 <span style="color:var(--down)">*</span><input name="name" required placeholder="예: 하수구 악취 세정 서버"></label>
+            <label>카테고리 <span style="font-weight:400;color:var(--muted2)">(자유 입력)</span>
+              <input name="category" list="categoryOptions" placeholder="예: 출시, 협찬, 공구, 테스트">
+            </label>
+            <label>일정 (오픈 예정일)<input name="date" type="date"></label>
+            <label>우선순위 <span style="font-weight:400;color:var(--muted2)">(숫자가 작을수록 우선)</span><input name="priority" type="number" min="1" step="1"></label>
+            <label class="ins-wide">제품 링크<input name="link" type="url" placeholder="상세페이지 URL (선택)"></label>
+            <label class="ins-wide">소구점 <span style="font-weight:400;color:var(--muted2)">(제품 니즈 분석 결과)</span><textarea name="selling" rows="2"></textarea></label>
+            <label>판매 시기 <span style="font-weight:400;color:var(--muted2)">(추천 월)</span><input name="timing" placeholder="예: 6월 ~ 8월"></label>
+            <label>공구 진행 시기<input name="group_buy_period" placeholder="예: 6/16 ~ 6/22"></label>
+            <label class="ins-wide">추천 근거 <span style="font-weight:400;color:var(--muted2)">(계절성·검색 수요 분석)</span><textarea name="recommend_reason" rows="2"></textarea></label>
+            <label>협찬 여부
+              <select name="sponsor_status">
+                <option value="none">해당 없음</option>
+                <option value="sponsored">협찬 (제품 제공)</option>
+                <option value="paid">유가 협찬</option>
+              </select>
+            </label>
+            <label>협찬 메모<input name="sponsor_note" placeholder="브랜드사, 조건 등"></label>
+            <label class="ins-wide">비고<textarea name="note" rows="2"></textarea></label>
+            <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">추가</button></div>
+          </form>
+        </details>
+      </div>
+
+      <datalist id="categoryOptions">
+        {% for c in suggested_categories %}<option value="{{ c }}">{% endfor %}
+      </datalist>
+
+      <div class="ins-toc-grid" style="display:grid;grid-template-columns:180px 1fr;gap:18px;margin-top:14px">
+        <form method="get" class="ins-toc">
+          <div class="ins-toc-title">목차</div>
+          <label>브랜드
+            <select name="brand" onchange="this.form.submit()">
+              <option value="">전체</option>
+              {% for b in brands %}<option value="{{ b }}" {{ 'selected' if brand==b }}>{{ b }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>카테고리
+            <select name="category" onchange="this.form.submit()">
+              <option value="">전체</option>
+              {% for c in categories %}<option value="{{ c }}" {{ 'selected' if category==c }}>{{ c }}</option>{% endfor %}
+            </select>
+          </label>
+          <div class="ins-toc-count">전체 {{ count }}건 등록됨</div>
+        </form>
+
+        <div>
+          {% for g in groups %}
+            <div class="brand-group" style="margin-bottom:22px">
+              <div class="chart-card-head" style="margin-bottom:8px"><div><h3 style="font-size:15px">{{ g.name }}</h3><div class="unit">{{ g.rows|length }}건</div></div></div>
+              <div class="chart-svg-wrap">
+                <table class="data-table">
+                  <thead><tr>
+                    <th>카테고리</th><th>제품</th><th>일정</th><th>우선순위</th><th>판매 시기</th><th>공구 시기</th><th>협찬</th><th>링크</th><th></th>
+                  </tr></thead>
+                  <tbody>
+                    {% for it in g.rows %}
+                    <tr>
+                      <td>{% if it.category %}<span class="ins-badge contact">{{ it.category }}</span>{% else %}-{% endif %}</td>
+                      <td>
+                        <div class="cell-primary">{{ it.name }}</div>
+                        {% if it.selling %}<div class="cell-sub">{{ it.selling }}</div>{% endif %}
+                      </td>
+                      <td>{{ it.date or '-' }}</td>
+                      <td>{{ it.priority if it.priority is not none else '-' }}</td>
+                      <td>{{ it.timing or '-' }}</td>
+                      <td>{{ it.group_buy_period or '-' }}</td>
+                      <td>
+                        {% if it.sponsor_status == 'sponsored' %}<span class="ins-badge pass">협찬</span>
+                        {% elif it.sponsor_status == 'paid' %}<span class="ins-badge warn">유가 협찬</span>
+                        {% else %}-{% endif %}
+                      </td>
+                      <td>{% if it.link %}<a href="{{ it.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
+                      <td style="white-space:nowrap">
+                        <details class="folder-edit">
+                          <summary class="folder-edit-btn">✎ 수정</summary>
+                          <form method="post" action="{{ url_for('schedule.update', item_id=it.id) }}" class="ins-form-grid" style="margin-top:10px;min-width:520px">
+                            <label>브랜드 <span style="color:var(--down)">*</span>
+                              <select name="brand" required>
+                                {% for b in brands %}<option {{ 'selected' if it.brand==b }}>{{ b }}</option>{% endfor %}
+                                {% if it.brand not in brands %}<option selected>{{ it.brand }}</option>{% endif %}
+                              </select>
+                            </label>
+                            <label>제품명 <span style="color:var(--down)">*</span><input name="name" required value="{{ it.name }}"></label>
+                            <label>카테고리<input name="category" list="categoryOptions" value="{{ it.category }}"></label>
+                            <label>일정<input name="date" type="date" value="{{ it.date }}"></label>
+                            <label>우선순위<input name="priority" type="number" min="1" step="1" value="{{ it.priority if it.priority is not none else '' }}"></label>
+                            <label class="ins-wide">제품 링크<input name="link" type="url" value="{{ it.link }}"></label>
+                            <label class="ins-wide">소구점<textarea name="selling" rows="2">{{ it.selling }}</textarea></label>
+                            <label>판매 시기<input name="timing" value="{{ it.timing }}"></label>
+                            <label>공구 진행 시기<input name="group_buy_period" value="{{ it.group_buy_period }}"></label>
+                            <label class="ins-wide">추천 근거<textarea name="recommend_reason" rows="2">{{ it.recommend_reason }}</textarea></label>
+                            <label>협찬 여부
+                              <select name="sponsor_status">
+                                <option value="none" {{ 'selected' if it.sponsor_status=='none' }}>해당 없음</option>
+                                <option value="sponsored" {{ 'selected' if it.sponsor_status=='sponsored' }}>협찬 (제품 제공)</option>
+                                <option value="paid" {{ 'selected' if it.sponsor_status=='paid' }}>유가 협찬</option>
+                              </select>
+                            </label>
+                            <label>협찬 메모<input name="sponsor_note" value="{{ it.sponsor_note }}"></label>
+                            <label class="ins-wide">비고<textarea name="note" rows="2">{{ it.note }}</textarea></label>
+                            <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">저장</button></div>
+                          </form>
+                        </details>
+                        <form method="post" action="{{ url_for('schedule.delete', item_id=it.id) }}" onsubmit="return confirm('{{ it.name }} 일정을 삭제할까요?')" style="margin-top:6px">
+                          <button class="ins-del-btn" type="submit">삭제</button>
+                        </form>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          {% else %}
+            <div class="chart-card"><p class="note" style="text-align:center;padding:20px 0">등록된 일정이 없습니다. 위 "+ 추가"로 첫 일정을 등록해 보세요.</p></div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 테스트 일정표 ============ -->
+  <div class="step-guide" data-step="tests">
+    <div class="chart-card">
+      <div class="chart-card-head" style="align-items:center">
+        <div><div class="eyebrow" style="margin-bottom:4px">TEST SCHEDULE</div><h3>테스트 일정표</h3><div class="unit">출시 전 테스트가 필요한 제품의 테스트 항목 · 일정 · 상태 · 담당자를 관리해요.</div></div>
+        <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 테스트 일정 추가</summary>
+          <form method="post" action="{{ url_for('schedule.tests_save') }}" class="ins-form-grid" style="margin-top:12px">
+            <label>브랜드<select name="brand">{% for b in brands %}<option>{{ b }}</option>{% endfor %}</select></label>
+            <label>대상 제품명<input name="product" required></label>
+            <label class="ins-wide">테스트 항목<input name="item"></label>
+            <label>테스트 일정<input name="date" type="date"></label>
+            <label>상태<select name="status">{% for s in statuses %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>
+            <label>담당자<input name="assignee"></label>
+            <label class="ins-wide">비고<input name="note"></label>
+            <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">추가</button></div>
+          </form>
+        </details>
+      </div>
+      <div class="chart-svg-wrap">
+        <table class="data-table">
+          <thead><tr><th>브랜드</th><th>제품</th><th>테스트 항목</th><th>일정</th><th>상태</th><th>담당자</th><th>비고</th><th></th></tr></thead>
+          <tbody>
+            {% for t in tests %}
+            <tr>
+              <td>{{ t.brand or '-' }}</td>
+              <td>{{ t.product }}</td><td>{{ t.item or '-' }}</td><td>{{ t.date or '-' }}</td>
+              <td><span class="ins-badge {{ 'pass' if t.status=='done' else ('fail' if t.status=='hold' else ('warn' if t.status=='inprogress' else 'contact')) }}">{{ status_map[t.status].name if t.status in status_map else t.status }}</span></td>
+              <td>{{ t.assignee or '-' }}</td><td>{{ t.note or '-' }}</td>
+              <td><form method="post" action="{{ url_for('schedule.tests_delete', test_id=t.id) }}" onsubmit="return confirm('삭제할까요?')"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 테스트 일정이 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  "use strict";
+  function bindTabs(barId, btnSelector, panelSelector, datasetKey) {
+    var bar = document.getElementById(barId);
+    if (!bar) return;
+    var buttons = bar.querySelectorAll(btnSelector);
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var val = btn.dataset[datasetKey];
+        buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
+        document.querySelectorAll(panelSelector).forEach(function (panel) {
+          var match = panel.dataset[datasetKey] === val;
+          panel.classList.toggle("active", match);
+          panel.hidden = !match;
+        });
+      });
+    });
+  }
+  bindTabs("sch-main-tabs", ".subtab", ".step-guide", "step");
+
+  // ---------- 캘린더 ----------
+  var calEvents = {{ calendar_events_json | safe }};
+  var brandColors = {{ brand_colors_json | safe }};
+  var byDate = {};
+  calEvents.forEach(function (e) {
+    (byDate[e.date] = byDate[e.date] || []).push(e);
+  });
+
+  var cur = new Date();
+  cur.setDate(1);
+  var todayStr = new Date().toISOString().slice(0, 10);
+  var dowNames = ["일", "월", "화", "수", "목", "금", "토"];
+  var titleEl = document.getElementById("sch-cal-title");
+  var bodyEl = document.getElementById("sch-cal-body");
+  var dowEl = document.getElementById("sch-cal-dow");
+
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
+
+  function render() {
+    var y = cur.getFullYear(), m = cur.getMonth();
+    titleEl.textContent = y + "년 " + (m + 1) + "월";
+    dowEl.innerHTML = "";
+    dowNames.forEach(function (d) {
+      var el = document.createElement("div");
+      el.className = "sch-cal-dow";
+      el.textContent = d;
+      dowEl.appendChild(el);
+    });
+
+    var firstDow = new Date(y, m, 1).getDay();
+    var daysInMonth = new Date(y, m + 1, 0).getDate();
+    var daysInPrev = new Date(y, m, 0).getDate();
+    var cells = [];
+    for (var i = firstDow - 1; i >= 0; i--) cells.push({ day: daysInPrev - i, outside: true, y: m === 0 ? y - 1 : y, m: m === 0 ? 11 : m - 1 });
+    for (var d = 1; d <= daysInMonth; d++) cells.push({ day: d, outside: false, y: y, m: m });
+    while (cells.length % 7 !== 0 || cells.length < 35) cells.push({ day: cells.length - (firstDow + daysInMonth) + 1, outside: true, y: m === 11 ? y + 1 : y, m: m === 11 ? 0 : m + 1 });
+
+    bodyEl.innerHTML = "";
+    cells.forEach(function (c) {
+      var dateStr = c.y + "-" + pad(c.m + 1) + "-" + pad(c.day);
+      var cell = document.createElement("div");
+      cell.className = "sch-cal-cell" + (c.outside ? " sch-cal-outside" : "") + (dateStr === todayStr ? " sch-cal-today" : "");
+      var num = document.createElement("div");
+      num.className = "sch-cal-daynum";
+      num.textContent = c.day;
+      cell.appendChild(num);
+      (byDate[dateStr] || []).forEach(function (e) {
+        var tag = document.createElement("div");
+        tag.className = "sch-cal-evt";
+        tag.style.background = brandColors[e.brand] || "var(--muted2)";
+        tag.title = e.title + (e.kind ? " (" + e.kind + ")" : "");
+        tag.textContent = e.title;
+        cell.appendChild(tag);
+      });
+      bodyEl.appendChild(cell);
+    });
+  }
+  document.getElementById("sch-cal-prev").addEventListener("click", function () { cur.setMonth(cur.getMonth() - 1); render(); });
+  document.getElementById("sch-cal-next").addEventListener("click", function () { cur.setMonth(cur.getMonth() + 1); render(); });
+  document.getElementById("sch-cal-today").addEventListener("click", function () { cur = new Date(); cur.setDate(1); render(); });
+  render();
+})();
+</script>
 {% endblock %}
