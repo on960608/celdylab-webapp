@@ -7,9 +7,6 @@ schedule_bp = Blueprint("schedule", __name__, url_prefix="/schedule")
 # 자료실(seed.py)에 이미 등록된 실제 브랜드 이름 그대로 사용해요.
 BRANDS = ["코드니처", "빠이러스", "명퉤", "라이프스타일"]
 
-# 자유 입력이지만, 처음 쓰는 사람이 참고할 수 있도록 자동완성 후보로 띄워주는 카테고리들
-SUGGESTED_CATEGORIES = ["출시", "협찬", "공구", "테스트", "콘텐츠", "기타"]
-
 SPONSOR_LABELS = {"none": "해당 없음", "sponsored": "협찬(제품 제공)", "paid": "유가 협찬"}
 
 # 캘린더/테스트 일정표에서 브랜드별로 구분해서 보여줄 때 쓰는 색상이에요 (이 화면 전용이라
@@ -36,7 +33,7 @@ def _fields_from_form(f):
     return {
         "brand": (f.get("brand") or "").strip(),
         "name": (f.get("name") or "").strip(),
-        "category": (f.get("category") or "").strip(),
+        "category": "",
         "date": (f.get("date") or "").strip(),
         "priority": int(priority_raw) if priority_raw.isdigit() else None,
         "link": (f.get("link") or "").strip(),
@@ -47,7 +44,20 @@ def _fields_from_form(f):
         "sponsor_status": (f.get("sponsor_status") or "none").strip(),
         "sponsor_note": (f.get("sponsor_note") or "").strip(),
         "note": (f.get("note") or "").strip(),
+        # 일반 추가/수정 폼으로 저장하면 곧 실제 정보가 채워진 것이므로 "분석 대기" 상태를 풀어요.
+        "pending_analysis": 0,
     }
+
+
+_LINK_ADD_PROMPT_TEMPLATE = (
+    "아래 상세페이지를 분석해서 '브랜드 런치 플래너 > 제품 우선순위 표'의 '{brand}' 항목을 채워줘.\n"
+    "링크: {link}\n\n"
+    "1) 상세페이지에서 제품명과 소구점(니즈 분석 결과)을 파악해줘.\n"
+    "2) 쿠팡·네이버에서 같은 제품군의 평소 수요(단독특가 등 일시적 이벤트는 제외)를 확인해줘.\n"
+    "3) 순수 판매에 적합한 추천 월을 '판매 시기'에, 근거를 '추천 근거'에 정리해줘.\n"
+    "4) 협찬 여부와 공구 진행 시기까지 파악되면 함께 채워줘.\n"
+    "5) 분석이 끝나면 이 표의 해당 항목을 수정 폼으로 갱신해줘 (제품명도 실제 이름으로 바꿔줘)."
+)
 
 
 @schedule_bp.route("/")
@@ -57,10 +67,7 @@ def index():
     import naver_datalab
 
     brand = request.args.get("brand") or None
-    category = request.args.get("category") or None
-    items = [dict(r) for r in db.list_product_schedule(brand, category)]
-
-    categories = sorted(set(db.list_product_schedule_categories()) | set(SUGGESTED_CATEGORIES))
+    items = [dict(r) for r in db.list_product_schedule(brand)]
 
     groups = []
     for b in BRANDS:
@@ -116,10 +123,7 @@ def index():
         brands=BRANDS,
         brand_colors=BRAND_COLORS,
         brand_colors_json=json.dumps(BRAND_COLORS, ensure_ascii=False),
-        categories=categories,
-        suggested_categories=SUGGESTED_CATEGORIES,
         brand=brand or "",
-        category=category or "",
         sponsor_labels=SPONSOR_LABELS,
         tests=tests,
         events=events,
@@ -128,6 +132,7 @@ def index():
         trend_snapshot=trend_snapshot,
         datalab_configured=naver_datalab.datalab_configured(),
         calendar_events_json=json.dumps(calendar_events, ensure_ascii=False),
+        link_prompt=session.pop("schedule_link_prompt", None),
     )
 
 
@@ -161,6 +166,28 @@ def update(item_id):
 def delete(item_id):
     db.delete_product_schedule(item_id)
     flash("삭제했어요.")
+    return redirect(url_for("schedule.index"))
+
+
+@schedule_bp.route("/products/link-add", methods=["POST"])
+def products_link_add():
+    f = request.form
+    brand = (f.get("brand") or "").strip()
+    link = (f.get("link") or "").strip()
+    if not brand or not link:
+        flash("브랜드와 링크를 모두 입력해 주세요.")
+        return redirect(url_for("schedule.index"))
+    db.create_product_schedule_link_only(brand, link, session.get("user_name"))
+    session["schedule_link_prompt"] = _LINK_ADD_PROMPT_TEMPLATE.format(brand=brand, link=link)
+    flash("'분석 대기' 상태로 추가했어요. 아래 안내 문구를 복사해서 Claude 대화창에 붙여넣어 주세요.")
+    return redirect(url_for("schedule.index"))
+
+
+@schedule_bp.route("/<int:item_id>/reorder", methods=["POST"])
+def reorder(item_id):
+    direction = request.form.get("direction")
+    if direction in ("up", "down"):
+        db.swap_product_schedule_priority(item_id, direction)
     return redirect(url_for("schedule.index"))
 
 
