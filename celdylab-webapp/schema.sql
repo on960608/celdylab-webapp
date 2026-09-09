@@ -169,13 +169,14 @@ CREATE TABLE IF NOT EXISTS giveaway_winners (
 );
 
 -- ---------------------------------------------------------------------------
--- 브랜드 제품 일정 (출시·공구·협찬·테스트 등을 "카테고리"로 분류해 관리하는 스케줄링 표)
+-- 브랜드 제품 일정 (브랜드 런치 플래너의 "제품 우선순위 표" — 브랜드별 우선순위로 관리)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS product_schedule (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   brand TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL DEFAULT '',
-  category TEXT NOT NULL DEFAULT '',          -- 스케줄링 카테고리 (예: 출시/협찬/공구/테스트/콘텐츠/기타 — 자유 입력)
+  category TEXT NOT NULL DEFAULT '',          -- (레거시) 예전 버전의 자유입력 카테고리 — 지금 화면에서는 안 쓰지만
+                                               -- 이미 저장된 값을 지우지 않으려고 컬럼은 남겨둬요.
   date TEXT NOT NULL DEFAULT '',              -- 일정(오픈 예정일), YYYY-MM-DD
   priority INTEGER,                           -- 브랜드 내 우선순위 (숫자가 작을수록 우선)
   link TEXT NOT NULL DEFAULT '',
@@ -186,6 +187,7 @@ CREATE TABLE IF NOT EXISTS product_schedule (
   sponsor_status TEXT NOT NULL DEFAULT 'none',-- none / sponsored / paid
   sponsor_note TEXT NOT NULL DEFAULT '',
   note TEXT NOT NULL DEFAULT '',
+  pending_analysis INTEGER NOT NULL DEFAULT 0,-- "링크로 분석 추가"로 만들어져 아직 분석 전인 항목 (1=분석 대기)
   created_by TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
