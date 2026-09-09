@@ -190,3 +190,49 @@ CREATE TABLE IF NOT EXISTS product_schedule (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+-- ---------------------------------------------------------------------------
+-- 브랜드 런치 플래너 — 테스트 일정표 / 캘린더 전용 일정 / 네이버 트렌드 스냅샷
+-- (product_schedule과 같은 "브랜드 런치 플래너" 화면의 나머지 탭들이에요. id는 서버에서
+-- 생성한 문자열 키(uuid4 hex)를 써요 — product_schedule의 AUTOINCREMENT 정수 id와는
+-- 별개 체계지만, 두 방식 다 이 앱에서 이미 쓰이고 있어서(브랜드 런치 플래너 원본 프로토타입
+-- 계열은 문자열 id, 나머지 대부분 표는 정수 id) 문제 없어요.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schedule_tests (
+  id TEXT PRIMARY KEY,
+  brand TEXT NOT NULL DEFAULT '',
+  product TEXT NOT NULL DEFAULT '',
+  item TEXT NOT NULL DEFAULT '',
+  date TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',   -- pending / inprogress / done / hold
+  assignee TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS schedule_events (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT '',
+  date TEXT NOT NULL DEFAULT '',
+  brand TEXT NOT NULL DEFAULT '',   -- 비워두면 "전체" 일정
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+-- 네이버 데이터랩 트렌드 스냅샷 — 행 하나만 유지(항상 id=1). "⚡ 자동 새로고침" 버튼을 누를
+-- 때마다 통째로 덮어써요. 처음엔 비어 있고(가짜 데이터를 심어두지 않음), 실제로 새로고침해야
+-- 값이 채워져요.
+CREATE TABLE IF NOT EXISTS schedule_trend_snapshot (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  category TEXT NOT NULL DEFAULT '',
+  range_label TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT '',
+  mobile_pct REAL,
+  desktop_pct REAL,
+  female_pct REAL,
+  male_pct REAL,
+  age_group TEXT NOT NULL DEFAULT '',
+  keywords TEXT NOT NULL DEFAULT '',  -- 쉼표로 구분된 인기 검색어 목록
+  series TEXT NOT NULL DEFAULT ''     -- JSON 배열 [{"date":"20260806","ratio":62.1}, ...]
+);
