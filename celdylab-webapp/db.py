@@ -25,6 +25,7 @@ def init_db():
     conn.commit()
     conn.close()
     _migrate_marketplace_best_items_columns()
+    _migrate_product_schedule_columns()
     _seed_product_schedule_if_empty()
 
 
@@ -38,6 +39,18 @@ def _migrate_marketplace_best_items_columns():
         conn.execute("ALTER TABLE marketplace_best_items ADD COLUMN keyword TEXT")
     if "search_count" not in existing_cols:
         conn.execute("ALTER TABLE marketplace_best_items ADD COLUMN search_count INTEGER")
+    conn.commit()
+    conn.close()
+
+
+def _migrate_product_schedule_columns():
+    """schema.sql은 CREATE TABLE IF NOT EXISTS라서 이미 배포된 DB에는 새 컬럼이 안 생겨요 —
+    "링크로 분석 추가" 기능에 필요한 pending_analysis 컬럼을 이미 배포된 DB에도 안전하게
+    (여러 번 실행돼도 괜찮게) 추가해줘요."""
+    conn = get_conn()
+    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(product_schedule)")}
+    if "pending_analysis" not in existing_cols:
+        conn.execute("ALTER TABLE product_schedule ADD COLUMN pending_analysis INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -210,8 +223,8 @@ def create_product_schedule(fields, created_by):
         INSERT INTO product_schedule
             (brand, name, category, date, priority, link, selling, timing,
              group_buy_period, recommend_reason, sponsor_status, sponsor_note, note,
-             created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             pending_analysis, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             fields.get("brand", ""), fields.get("name", ""), fields.get("category", ""),
@@ -219,6 +232,7 @@ def create_product_schedule(fields, created_by):
             fields.get("selling", ""), fields.get("timing", ""), fields.get("group_buy_period", ""),
             fields.get("recommend_reason", ""), fields.get("sponsor_status", "none"),
             fields.get("sponsor_note", ""), fields.get("note", ""),
+            fields.get("pending_analysis", 0),
             created_by, now, now,
         ),
     )
@@ -233,7 +247,7 @@ def update_product_schedule(item_id, fields):
         UPDATE product_schedule SET
             brand = ?, name = ?, category = ?, date = ?, priority = ?, link = ?,
             selling = ?, timing = ?, group_buy_period = ?, recommend_reason = ?,
-            sponsor_status = ?, sponsor_note = ?, note = ?, updated_at = ?
+            sponsor_status = ?, sponsor_note = ?, note = ?, pending_analysis = ?, updated_at = ?
         WHERE id = ?
         """,
         (
@@ -242,9 +256,69 @@ def update_product_schedule(item_id, fields):
             fields.get("selling", ""), fields.get("timing", ""), fields.get("group_buy_period", ""),
             fields.get("recommend_reason", ""), fields.get("sponsor_status", "none"),
             fields.get("sponsor_note", ""), fields.get("note", ""),
+            fields.get("pending_analysis", 0),
             now_iso(), item_id,
         ),
     )
+    conn.commit()
+    conn.close()
+
+
+def create_product_schedule_link_only(brand, link, created_by):
+    """"링크로 분석 추가" 워크플로우 — 브랜드와 상세페이지 링크만 받아서 "분석 대기" 상태로
+    표에 즉시 추가해요. 나머지 필드(소구점/판매 시기/추천 근거 등)는 비워두고, Claude가 분석을
+    마친 뒤 수정 폼으로 채워 넣으면(그 시점에 pending_analysis는 0으로 풀려요) 완성돼요."""
+    conn = get_conn()
+    now = now_iso()
+    cur = conn.execute(
+        """
+        INSERT INTO product_schedule
+            (brand, name, category, date, priority, link, selling, timing,
+             group_buy_period, recommend_reason, sponsor_status, sponsor_note, note,
+             pending_analysis, created_by, created_at, updated_at)
+        VALUES (?, ?, '', '', NULL, ?, '', '', '', '', 'none', '', '', 1, ?, ?, ?)
+        """,
+        (brand, "분석 대기 제품", link, created_by, now, now),
+    )
+    new_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def swap_product_schedule_priority(item_id, direction):
+    """같은 브랜드 안에서 우선순위를 바로 위/아래 항목과 맞바꿔요. direction: 'up' | 'down'.
+    화면에 표시되는 정렬 기준(list_product_schedule과 동일)으로 순서를 계산하고, 우선순위 값이
+    비어있는(NULL) 항목이 섞여 있으면 먼저 1부터 다시 번호를 매겨 순서를 확정한 뒤 맞바꿔요."""
+    conn = get_conn()
+    item = conn.execute("SELECT * FROM product_schedule WHERE id = ?", (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        return
+    order_sql = (
+        "SELECT * FROM product_schedule WHERE brand = ? "
+        "ORDER BY (priority IS NULL), priority, (date = ''), date, id"
+    )
+    siblings = conn.execute(order_sql, (item["brand"],)).fetchall()
+    ids = [r["id"] for r in siblings]
+    idx = ids.index(item_id)
+    swap_idx = idx - 1 if direction == "up" else idx + 1
+    if swap_idx < 0 or swap_idx >= len(siblings):
+        conn.close()
+        return
+
+    if any(r["priority"] is None for r in siblings):
+        for pos, row in enumerate(siblings, start=1):
+            conn.execute("UPDATE product_schedule SET priority = ? WHERE id = ?", (pos, row["id"]))
+        conn.commit()
+        siblings = conn.execute(order_sql, (item["brand"],)).fetchall()
+
+    a_priority = siblings[idx]["priority"]
+    b_priority = siblings[swap_idx]["priority"]
+    other_id = siblings[swap_idx]["id"]
+    now = now_iso()
+    conn.execute("UPDATE product_schedule SET priority = ?, updated_at = ? WHERE id = ?", (b_priority, now, item_id))
+    conn.execute("UPDATE product_schedule SET priority = ?, updated_at = ? WHERE id = ?", (a_priority, now, other_id))
     conn.commit()
     conn.close()
 
