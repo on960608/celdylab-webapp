@@ -163,6 +163,13 @@ details > summary::-webkit-details-marker { display: none; }
 @media (max-width: 720px) { .ins-toc-grid { grid-template-columns: 1fr !important; } }
 
 .gp-forecast-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
+
+/* ---------- trend page: popular sellers / category insight side-by-side split ---------- */
+.trend-split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; margin-bottom: 16px; }
+.trend-split-grid > .chart-card { margin-bottom: 0; height: 100%; }
+@media (max-width: 860px) { .trend-split-grid { grid-template-columns: 1fr; } }
+.top10-list.scrollable { max-height: 520px; overflow-y: auto; padding-right: 4px; }
+
 .gp-forecast-tile { background: var(--panel-soft); border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px; }
 .gp-forecast-tile span { display: block; font-size: 11px; color: var(--muted2); font-weight: 800; margin-bottom: 4px; }
 .gp-forecast-tile strong { display: block; font-size: 15px; font-weight: 800; color: var(--ink); }
