@@ -25,6 +25,8 @@
   .sch-cal-evt { font-size: 10px; font-weight: 700; padding: 2px 5px; border-radius: 5px; color: #fff; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sch-cal-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 11.5px; color: var(--muted); }
   .sch-cal-legend span { display: inline-flex; align-items: center; }
+  .sch-reorder-btn { font-family: inherit; cursor: pointer; border: 1px solid var(--line2); background: var(--panel-soft); color: var(--muted); font-size: 9px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+  .sch-reorder-btn:hover { background: var(--accent-soft); color: var(--accent-deep); }
 </style>
 
 <div class="block-head">
@@ -136,6 +138,30 @@
 
   <!-- ============ 제품 우선순위 표 ============ -->
   <div class="step-guide active" data-step="products">
+    {% if link_prompt %}
+    <div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+      <div class="chart-card-head" style="align-items:center">
+        <div><div class="eyebrow" style="margin-bottom:4px">분석 요청 문구</div><h3>이 문구를 복사해서 Claude 대화창에 붙여넣어 주세요</h3></div>
+        <button type="button" class="refresh-btn" id="sch-copy-prompt-btn">📋 복사</button>
+      </div>
+      <textarea id="sch-link-prompt" readonly rows="7" style="width:100%;margin-top:8px;font-family:inherit;font-size:12.5px;padding:10px;border-radius:8px;border:1px solid var(--line2);background:var(--panel-soft);color:var(--ink);resize:vertical">{{ link_prompt }}</textarea>
+    </div>
+    {% endif %}
+
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-card-head" style="align-items:center">
+        <div><div class="eyebrow" style="margin-bottom:4px">QUICK ADD</div><h3>링크로 분석 추가</h3><div class="unit">상세페이지 링크만 넣으면 "분석 대기" 상태로 바로 추가돼요. Claude에게 분석을 요청하는 문구가 자동으로 만들어져요.</div></div>
+        <form method="post" action="{{ url_for('schedule.products_link_add') }}" style="display:flex;gap:8px;align-items:center">
+          <select name="brand" required>
+            <option value="">브랜드 선택</option>
+            {% for b in brands %}<option>{{ b }}</option>{% endfor %}
+          </select>
+          <input name="link" type="url" required placeholder="상세페이지 URL" style="min-width:260px">
+          <button class="refresh-btn" type="submit">+ 분석 대기로 추가</button>
+        </form>
+      </div>
+    </div>
+
     <div class="chart-card" style="margin-bottom:16px">
       <div class="chart-card-head" style="align-items:center">
         <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>일정 추가</h3></div>
@@ -148,9 +174,6 @@
               </select>
             </label>
             <label>제품명 <span style="color:var(--down)">*</span><input name="name" required placeholder="예: 하수구 악취 세정 서버"></label>
-            <label>카테고리 <span style="font-weight:400;color:var(--muted2)">(자유 입력)</span>
-              <input name="category" list="categoryOptions" placeholder="예: 출시, 협찬, 공구, 테스트">
-            </label>
             <label>일정 (오픈 예정일)<input name="date" type="date"></label>
             <label>우선순위 <span style="font-weight:400;color:var(--muted2)">(숫자가 작을수록 우선)</span><input name="priority" type="number" min="1" step="1"></label>
             <label class="ins-wide">제품 링크<input name="link" type="url" placeholder="상세페이지 URL (선택)"></label>
@@ -172,10 +195,6 @@
         </details>
       </div>
 
-      <datalist id="categoryOptions">
-        {% for c in suggested_categories %}<option value="{{ c }}">{% endfor %}
-      </datalist>
-
       <div class="ins-toc-grid" style="display:grid;grid-template-columns:180px 1fr;gap:18px;margin-top:14px">
         <form method="get" class="ins-toc">
           <div class="ins-toc-title">목차</div>
@@ -185,34 +204,39 @@
               {% for b in brands %}<option value="{{ b }}" {{ 'selected' if brand==b }}>{{ b }}</option>{% endfor %}
             </select>
           </label>
-          <label>카테고리
-            <select name="category" onchange="this.form.submit()">
-              <option value="">전체</option>
-              {% for c in categories %}<option value="{{ c }}" {{ 'selected' if category==c }}>{{ c }}</option>{% endfor %}
-            </select>
-          </label>
           <div class="ins-toc-count">전체 {{ count }}건 등록됨</div>
         </form>
 
         <div>
           {% for g in groups %}
             <div class="brand-group" style="margin-bottom:22px">
-              <div class="chart-card-head" style="margin-bottom:8px"><div><h3 style="font-size:15px">{{ g.name }}</h3><div class="unit">{{ g.rows|length }}건</div></div></div>
+              <div class="chart-card-head" style="margin-bottom:8px">
+                <div>
+                  <h3 style="font-size:15px"><span class="sch-brand-dot" style="background:{{ brand_colors.get(g.name, 'var(--muted2)') }}"></span>{{ g.name }}</h3>
+                  <div class="unit">{{ g.rows|length }}건</div>
+                </div>
+              </div>
               <div class="chart-svg-wrap">
                 <table class="data-table">
                   <thead><tr>
-                    <th>카테고리</th><th>제품</th><th>일정</th><th>우선순위</th><th>판매 시기</th><th>공구 시기</th><th>협찬</th><th>링크</th><th></th>
+                    <th>제품</th><th>일정</th><th>우선순위</th><th>판매 시기</th><th>공구 시기</th><th>협찬</th><th>링크</th><th></th>
                   </tr></thead>
                   <tbody>
                     {% for it in g.rows %}
                     <tr>
-                      <td>{% if it.category %}<span class="ins-badge contact">{{ it.category }}</span>{% else %}-{% endif %}</td>
                       <td>
                         <div class="cell-primary">{{ it.name }}</div>
-                        {% if it.selling %}<div class="cell-sub">{{ it.selling }}</div>{% endif %}
+                        {% if it.pending_analysis %}<div class="cell-sub"><span class="ins-badge warn">분석 대기</span></div>
+                        {% elif it.selling %}<div class="cell-sub">{{ it.selling }}</div>{% endif %}
                       </td>
                       <td>{{ it.date or '-' }}</td>
-                      <td>{{ it.priority if it.priority is not none else '-' }}</td>
+                      <td style="white-space:nowrap">
+                        {{ it.priority if it.priority is not none else '-' }}
+                        <span style="display:inline-flex;flex-direction:column;vertical-align:middle;margin-left:4px">
+                          <form method="post" action="{{ url_for('schedule.reorder', item_id=it.id) }}"><input type="hidden" name="direction" value="up"><button type="submit" class="sch-reorder-btn" title="우선순위 올리기">▲</button></form>
+                          <form method="post" action="{{ url_for('schedule.reorder', item_id=it.id) }}"><input type="hidden" name="direction" value="down"><button type="submit" class="sch-reorder-btn" title="우선순위 내리기">▼</button></form>
+                        </span>
+                      </td>
                       <td>{{ it.timing or '-' }}</td>
                       <td>{{ it.group_buy_period or '-' }}</td>
                       <td>
@@ -232,7 +256,6 @@
                               </select>
                             </label>
                             <label>제품명 <span style="color:var(--down)">*</span><input name="name" required value="{{ it.name }}"></label>
-                            <label>카테고리<input name="category" list="categoryOptions" value="{{ it.category }}"></label>
                             <label>일정<input name="date" type="date" value="{{ it.date }}"></label>
                             <label>우선순위<input name="priority" type="number" min="1" step="1" value="{{ it.priority if it.priority is not none else '' }}"></label>
                             <label class="ins-wide">제품 링크<input name="link" type="url" value="{{ it.link }}"></label>
@@ -330,6 +353,30 @@
     });
   }
   bindTabs("sch-main-tabs", ".subtab", ".step-guide", "step");
+
+  // ---------- 링크로 분석 추가: 요청 문구 복사 ----------
+  var copyBtn = document.getElementById("sch-copy-prompt-btn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", function () {
+      var ta = document.getElementById("sch-link-prompt");
+      var text = ta ? ta.value : "";
+      var done = function () {
+        copyBtn.textContent = "✓ 복사됨";
+        setTimeout(function () { copyBtn.textContent = "📋 복사"; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {
+          ta.select();
+          document.execCommand("copy");
+          done();
+        });
+      } else {
+        ta.select();
+        document.execCommand("copy");
+        done();
+      }
+    });
+  }
 
   // ---------- 캘린더 ----------
   var calEvents = {{ calendar_events_json | safe }};
