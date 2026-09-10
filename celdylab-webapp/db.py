@@ -5,7 +5,6 @@
 """
 import sqlite3
 import os
-import uuid
 from datetime import datetime, timezone
 
 DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "celdylab.db"))
@@ -22,70 +21,29 @@ def init_db():
     conn = get_conn()
     with open(os.path.join(os.path.dirname(__file__), "schema.sql"), "r", encoding="utf-8") as f:
         conn.executescript(f.read())
-    conn.commit()
-    conn.close()
-    _migrate_marketplace_best_items_columns()
-    _migrate_product_schedule_columns()
-    _seed_product_schedule_if_empty()
-
-
-def _migrate_marketplace_best_items_columns():
-    """schema.sql은 CREATE TABLE IF NOT EXISTS라서 이미 만들어진 테이블에는 새 컬럼이
-    안 생겨요 — 네이버 검색량 기능에 필요한 keyword/search_count 컬럼을 이미 배포된 DB에도
-    안전하게(여러 번 실행돼도 괜찮게) 추가해줘요."""
-    conn = get_conn()
-    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(marketplace_best_items)")}
-    if "keyword" not in existing_cols:
-        conn.execute("ALTER TABLE marketplace_best_items ADD COLUMN keyword TEXT")
-    if "search_count" not in existing_cols:
-        conn.execute("ALTER TABLE marketplace_best_items ADD COLUMN search_count INTEGER")
+    _migrate(conn)
     conn.commit()
     conn.close()
 
 
-def _migrate_product_schedule_columns():
-    """schema.sql은 CREATE TABLE IF NOT EXISTS라서 이미 배포된 DB에는 새 컬럼이 안 생겨요 —
-    "링크로 분석 추가" 기능에 필요한 pending_analysis 컬럼을 이미 배포된 DB에도 안전하게
-    (여러 번 실행돼도 괜찮게) 추가해줘요."""
-    conn = get_conn()
-    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(product_schedule)")}
-    if "pending_analysis" not in existing_cols:
-        conn.execute("ALTER TABLE product_schedule ADD COLUMN pending_analysis INTEGER NOT NULL DEFAULT 0")
-    conn.commit()
-    conn.close()
+def _migrate(conn):
+    """
+    CREATE TABLE IF NOT EXISTS는 이미 있는 테이블에 새 컬럼을 추가해주지 않아서,
+    기존 배포에 새 컬럼이 필요할 때는 여기서 직접 ALTER TABLE로 보정해요.
+    (이미 컬럼이 있으면 조용히 건너뜀 — 기존 데이터는 전혀 건드리지 않아요.)
+    """
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(trend_records)").fetchall()}
+    if "product_group_id" not in cols:
+        # SQLite의 ALTER TABLE ADD COLUMN은 REFERENCES 절 제약이 까다로워서 일반 컬럼으로 추가하고,
+        # 무결성은 애플리케이션 코드(db.py)에서 관리해요.
+        conn.execute("ALTER TABLE trend_records ADD COLUMN product_group_id INTEGER")
 
-
-def _seed_product_schedule_if_empty():
-    """새로 만들어진 '브랜드 제품 일정' 표에, "브랜드 런치 플래너"에서 실제로 분석을 마친
-    항목 하나(하수구 악취 세정 서버 — 자료실의 '하수구 세정서버'와 동일 제품)만 예시로 채워둬요.
-    그 문서의 나머지 항목은 전부 "(예시)" 표시가 붙은 참고용 가짜 데이터라 실제 DB에 넣지
-    않았어요 — 진짜 일정은 이 표에서 직접 추가해 주세요. 표가 비어 있을 때만 1회 실행돼요."""
-    if count_product_schedule() > 0:
-        return
-    now = now_iso()
-    conn = get_conn()
+    # 상품기회점수 가중치는 항상 정확히 한 행(id=1)이 있어야 화면에서 바로 읽고 조정할 수 있어요.
     conn.execute(
-        """
-        INSERT INTO product_schedule
-            (brand, name, category, date, priority, link, selling, timing,
-             group_buy_period, recommend_reason, sponsor_status, sponsor_note, note,
-             created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "코드니처", "하수구 악취 세정 서버", "출시", "", 1,
-            "https://codenit.co.kr/product/detail.html?product_no=23",
-            "싱크대 배수구에 던져 넣기만 하면 되는 간편 사용, 거품 세정+탈취 동시 해결, 리뷰 156건 대부분 5점 · 재구매율 높음, 오늘출발 배송 가능. 1세트/2+1세트/3+2세트(BEST) 구성, 판매가 19,900원(23% 할인)",
-            "6월 ~ 8월 (초여름~한여름 순수 판매 추천)",
-            "6월 3주차 ~ 7월 1주차 진행 추천",
-            "하수구 악취는 고온다습한 환경에서 배수구 내 세균·유기물이 늘며 심해지는 계절성 문제라, 무더위가 시작되는 초여름부터 한여름(6~8월)에 관련 수요와 검색이 늘어나는 경향이 있어요 (일반 검색 결과 기반 추정치 — 정확한 월별 수치는 네이버 데이터랩 쇼핑인사이트에서 직접 확인 권장).",
-            "none", "자사몰(codenit.co.kr) 판매 상품 — 협찬 정황 없음",
-            "브랜드 런치 플래너에서 링크 분석 완료된 항목을 이어받음. 자료실의 '하수구 세정서버'와 동일 제품.",
-            "seed", now, now,
-        ),
+        "INSERT OR IGNORE INTO opportunity_weights (id, trend_weight, seeding_weight, gongu_weight, fit_weight, updated_at) "
+        "VALUES (1, 40, 25, 25, 10, ?)",
+        (now_iso(),),
     )
-    conn.commit()
-    conn.close()
 
 
 def now_iso():
@@ -116,13 +74,6 @@ def create_employee(username, password_hash, name):
         "INSERT INTO employees (username, password_hash, name, created_at) VALUES (?, ?, ?, ?)",
         (username, password_hash, name, now_iso()),
     )
-    conn.commit()
-    conn.close()
-
-
-def update_employee_username(emp_id, new_username):
-    conn = get_conn()
-    conn.execute("UPDATE employees SET username = ? WHERE id = ?", (new_username, emp_id))
     conn.commit()
     conn.close()
 
@@ -179,162 +130,6 @@ def upsert_archive_link(brand, product, url, updated_by):
     )
     conn.commit()
     conn.close()
-
-
-# ---------- 브랜드 제품 일정 (스케줄링 카테고리 포함) ----------
-
-def list_product_schedule(brand=None, category=None):
-    conn = get_conn()
-    query = "SELECT * FROM product_schedule WHERE 1=1"
-    params = []
-    if brand:
-        query += " AND brand = ?"
-        params.append(brand)
-    if category:
-        query += " AND category = ?"
-        params.append(category)
-    query += " ORDER BY brand, (priority IS NULL), priority, (date = ''), date"
-    rows = conn.execute(query, params).fetchall()
-    conn.close()
-    return rows
-
-
-def list_product_schedule_categories():
-    conn = get_conn()
-    rows = conn.execute(
-        "SELECT DISTINCT category FROM product_schedule WHERE category != '' ORDER BY category"
-    ).fetchall()
-    conn.close()
-    return [r["category"] for r in rows]
-
-
-def get_product_schedule(item_id):
-    conn = get_conn()
-    row = conn.execute("SELECT * FROM product_schedule WHERE id = ?", (item_id,)).fetchone()
-    conn.close()
-    return row
-
-
-def create_product_schedule(fields, created_by):
-    conn = get_conn()
-    now = now_iso()
-    conn.execute(
-        """
-        INSERT INTO product_schedule
-            (brand, name, category, date, priority, link, selling, timing,
-             group_buy_period, recommend_reason, sponsor_status, sponsor_note, note,
-             pending_analysis, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            fields.get("brand", ""), fields.get("name", ""), fields.get("category", ""),
-            fields.get("date", ""), fields.get("priority"), fields.get("link", ""),
-            fields.get("selling", ""), fields.get("timing", ""), fields.get("group_buy_period", ""),
-            fields.get("recommend_reason", ""), fields.get("sponsor_status", "none"),
-            fields.get("sponsor_note", ""), fields.get("note", ""),
-            fields.get("pending_analysis", 0),
-            created_by, now, now,
-        ),
-    )
-    conn.commit()
-    conn.close()
-
-
-def update_product_schedule(item_id, fields):
-    conn = get_conn()
-    conn.execute(
-        """
-        UPDATE product_schedule SET
-            brand = ?, name = ?, category = ?, date = ?, priority = ?, link = ?,
-            selling = ?, timing = ?, group_buy_period = ?, recommend_reason = ?,
-            sponsor_status = ?, sponsor_note = ?, note = ?, pending_analysis = ?, updated_at = ?
-        WHERE id = ?
-        """,
-        (
-            fields.get("brand", ""), fields.get("name", ""), fields.get("category", ""),
-            fields.get("date", ""), fields.get("priority"), fields.get("link", ""),
-            fields.get("selling", ""), fields.get("timing", ""), fields.get("group_buy_period", ""),
-            fields.get("recommend_reason", ""), fields.get("sponsor_status", "none"),
-            fields.get("sponsor_note", ""), fields.get("note", ""),
-            fields.get("pending_analysis", 0),
-            now_iso(), item_id,
-        ),
-    )
-    conn.commit()
-    conn.close()
-
-
-def create_product_schedule_link_only(brand, link, created_by):
-    """"링크로 분석 추가" 워크플로우 — 브랜드와 상세페이지 링크만 받아서 "분석 대기" 상태로
-    표에 즉시 추가해요. 나머지 필드(소구점/판매 시기/추천 근거 등)는 비워두고, Claude가 분석을
-    마친 뒤 수정 폼으로 채워 넣으면(그 시점에 pending_analysis는 0으로 풀려요) 완성돼요."""
-    conn = get_conn()
-    now = now_iso()
-    cur = conn.execute(
-        """
-        INSERT INTO product_schedule
-            (brand, name, category, date, priority, link, selling, timing,
-             group_buy_period, recommend_reason, sponsor_status, sponsor_note, note,
-             pending_analysis, created_by, created_at, updated_at)
-        VALUES (?, ?, '', '', NULL, ?, '', '', '', '', 'none', '', '', 1, ?, ?, ?)
-        """,
-        (brand, "분석 대기 제품", link, created_by, now, now),
-    )
-    new_id = cur.lastrowid
-    conn.commit()
-    conn.close()
-    return new_id
-
-
-def swap_product_schedule_priority(item_id, direction):
-    """같은 브랜드 안에서 우선순위를 바로 위/아래 항목과 맞바꿔요. direction: 'up' | 'down'.
-    화면에 표시되는 정렬 기준(list_product_schedule과 동일)으로 순서를 계산하고, 우선순위 값이
-    비어있는(NULL) 항목이 섞여 있으면 먼저 1부터 다시 번호를 매겨 순서를 확정한 뒤 맞바꿔요."""
-    conn = get_conn()
-    item = conn.execute("SELECT * FROM product_schedule WHERE id = ?", (item_id,)).fetchone()
-    if not item:
-        conn.close()
-        return
-    order_sql = (
-        "SELECT * FROM product_schedule WHERE brand = ? "
-        "ORDER BY (priority IS NULL), priority, (date = ''), date, id"
-    )
-    siblings = conn.execute(order_sql, (item["brand"],)).fetchall()
-    ids = [r["id"] for r in siblings]
-    idx = ids.index(item_id)
-    swap_idx = idx - 1 if direction == "up" else idx + 1
-    if swap_idx < 0 or swap_idx >= len(siblings):
-        conn.close()
-        return
-
-    if any(r["priority"] is None for r in siblings):
-        for pos, row in enumerate(siblings, start=1):
-            conn.execute("UPDATE product_schedule SET priority = ? WHERE id = ?", (pos, row["id"]))
-        conn.commit()
-        siblings = conn.execute(order_sql, (item["brand"],)).fetchall()
-
-    a_priority = siblings[idx]["priority"]
-    b_priority = siblings[swap_idx]["priority"]
-    other_id = siblings[swap_idx]["id"]
-    now = now_iso()
-    conn.execute("UPDATE product_schedule SET priority = ?, updated_at = ? WHERE id = ?", (b_priority, now, item_id))
-    conn.execute("UPDATE product_schedule SET priority = ?, updated_at = ? WHERE id = ?", (a_priority, now, other_id))
-    conn.commit()
-    conn.close()
-
-
-def delete_product_schedule(item_id):
-    conn = get_conn()
-    conn.execute("DELETE FROM product_schedule WHERE id = ?", (item_id,))
-    conn.commit()
-    conn.close()
-
-
-def count_product_schedule():
-    conn = get_conn()
-    n = conn.execute("SELECT COUNT(*) AS n FROM product_schedule").fetchone()["n"]
-    conn.close()
-    return n
 
 
 # ---------- 시딩 인사이트 ----------
@@ -560,9 +355,9 @@ def list_trend_records():
 def create_trend_record(data, created_by):
     conn = get_conn()
     conn.execute(
-        """INSERT INTO trend_records (check_date, platform, seller, product, category, price, link, created_by, created_at)
-           VALUES (:check_date, :platform, :seller, :product, :category, :price, :link, :created_by, :created_at)""",
-        {**data, "created_by": created_by, "created_at": now_iso()},
+        """INSERT INTO trend_records (check_date, platform, seller, product, category, price, link, product_group_id, created_by, created_at)
+           VALUES (:check_date, :platform, :seller, :product, :category, :price, :link, :product_group_id, :created_by, :created_at)""",
+        {"product_group_id": None, **data, "created_by": created_by, "created_at": now_iso()},
     )
     conn.commit()
     conn.close()
@@ -580,92 +375,6 @@ def clear_trend_records():
     conn.execute("DELETE FROM trend_records")
     conn.commit()
     conn.close()
-
-
-def clear_auto_trend_records():
-    """자동 수집(82market·지금하는공구·공구모아)으로 들어온 기록만 지워요.
-    수동으로 '+ 등록'한 기록은 건드리지 않아요."""
-    conn = get_conn()
-    conn.execute("DELETE FROM trend_records WHERE created_by = 'auto-refresh'")
-    conn.commit()
-    conn.close()
-
-
-def latest_auto_trend_refresh_at():
-    """가장 최근 자동 수집이 언제 있었는지(created_at, UTC ISO 문자열) 돌려줘요.
-    한 번도 없었으면 None이에요."""
-    conn = get_conn()
-    row = conn.execute(
-        "SELECT MAX(created_at) AS latest FROM trend_records WHERE created_by = 'auto-refresh'"
-    ).fetchone()
-    conn.close()
-    return row["latest"] if row else None
-
-
-# ---------- 외부몰 트렌드 분석 — 이커머스 마켓플레이스 베스트셀러 ----------
-
-def replace_marketplace_best_items(platform, category, items):
-    """(platform, category) 조합의 기존 순위 데이터를 지우고, 지금 막 읽어온 순위로
-    통째로 교체해요. items는 {rank, product, original_price, discount_pct, sale_price, link,
-    keyword, search_count} 목록이에요(keyword/search_count는 네이버 전용이라 없으면 None)."""
-    conn = get_conn()
-    now = now_iso()
-    conn.execute(
-        "DELETE FROM marketplace_best_items WHERE platform = ? AND category = ?",
-        (platform, category),
-    )
-    if items:
-        conn.executemany(
-            """INSERT INTO marketplace_best_items
-               (platform, category, rank, product, original_price, discount_pct, sale_price, link,
-                keyword, search_count, collected_at)
-               VALUES (:platform, :category, :rank, :product, :original_price, :discount_pct, :sale_price, :link,
-                       :keyword, :search_count, :collected_at)""",
-            [
-                {
-                    "platform": platform,
-                    "category": category,
-                    "collected_at": now,
-                    "rank": it.get("rank"),
-                    "product": it.get("product", ""),
-                    "original_price": it.get("original_price"),
-                    "discount_pct": it.get("discount_pct"),
-                    "sale_price": it.get("sale_price"),
-                    "link": it.get("link", ""),
-                    "keyword": it.get("keyword"),
-                    "search_count": it.get("search_count"),
-                }
-                for it in items
-            ],
-        )
-    conn.commit()
-    conn.close()
-
-
-def list_marketplace_best_items(category=None):
-    conn = get_conn()
-    if category:
-        rows = conn.execute(
-            "SELECT * FROM marketplace_best_items WHERE category = ? ORDER BY rank ASC", (category,)
-        ).fetchall()
-    else:
-        rows = conn.execute("SELECT * FROM marketplace_best_items ORDER BY category, rank ASC").fetchall()
-    conn.close()
-    return rows
-
-
-def latest_marketplace_collected_at(platform=None):
-    """가장 최근 마켓플레이스 베스트셀러 수집이 언제 있었는지(UTC ISO 문자열) 돌려줘요.
-    platform을 주면 그 플랫폼만, 아니면 전체 중 가장 최근 값이에요. 한 번도 없었으면 None."""
-    conn = get_conn()
-    if platform:
-        row = conn.execute(
-            "SELECT MAX(collected_at) AS latest FROM marketplace_best_items WHERE platform = ?", (platform,)
-        ).fetchone()
-    else:
-        row = conn.execute("SELECT MAX(collected_at) AS latest FROM marketplace_best_items").fetchone()
-    conn.close()
-    return row["latest"] if row else None
 
 
 # ---------- 댓글 이벤트 추첨 ----------
@@ -725,111 +434,313 @@ def delete_giveaway_event(event_id):
 
 
 # ---------------------------------------------------------------------------
-# 브랜드 런치 플래너 — 테스트 일정표 / 캘린더 전용 일정 / 네이버 트렌드 스냅샷
-# (제품 우선순위 표는 product_schedule 테이블 함수들을 그대로 써요. 여긴 그 화면의
-# 나머지 탭들만 담당해요)
+# 매출 기회 발굴 대시보드
 # ---------------------------------------------------------------------------
 
-def _new_id(prefix):
-    return prefix + uuid.uuid4().hex[:12]
+# ---------- 자사 제품 속성(product_profiles / product_keywords) ----------
 
-
-_SCHEDULE_TEST_FIELDS = ("brand", "product", "item", "date", "status", "assignee", "note")
-
-
-def list_schedule_tests():
+def get_or_create_product_profile(brand, product):
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM schedule_tests ORDER BY date, id").fetchall()
-    conn.close()
-    return rows
-
-
-def create_schedule_test(data):
-    conn = get_conn()
-    now = now_iso()
-    new_id = _new_id("t")
-    row = {k: data.get(k, "") for k in _SCHEDULE_TEST_FIELDS}
+    row = conn.execute(
+        "SELECT * FROM product_profiles WHERE brand = ? AND product = ?", (brand, product)
+    ).fetchone()
+    if row:
+        conn.close()
+        return row
     conn.execute(
-        """INSERT INTO schedule_tests (id, brand, product, item, date, status, assignee, note, created_at, updated_at)
-           VALUES (:id, :brand, :product, :item, :date, :status, :assignee, :note, :created_at, :updated_at)""",
-        {**row, "id": new_id, "created_at": now, "updated_at": now},
+        "INSERT INTO product_profiles (brand, product, updated_at) VALUES (?, ?, ?)",
+        (brand, product, now_iso()),
     )
     conn.commit()
-    conn.close()
-    return new_id
-
-
-def delete_schedule_test(test_id):
-    conn = get_conn()
-    conn.execute("DELETE FROM schedule_tests WHERE id = ?", (test_id,))
-    conn.commit()
-    conn.close()
-
-
-def list_schedule_events():
-    conn = get_conn()
-    rows = conn.execute("SELECT * FROM schedule_events ORDER BY date, id").fetchall()
-    conn.close()
-    return rows
-
-
-def create_schedule_event(data):
-    conn = get_conn()
-    new_id = _new_id("e")
-    conn.execute(
-        """INSERT INTO schedule_events (id, title, date, brand, note, created_at)
-           VALUES (:id, :title, :date, :brand, :note, :created_at)""",
-        {
-            "id": new_id, "title": data.get("title", ""), "date": data.get("date", ""),
-            "brand": data.get("brand", ""), "note": data.get("note", ""), "created_at": now_iso(),
-        },
-    )
-    conn.commit()
-    conn.close()
-    return new_id
-
-
-def delete_schedule_event(event_id):
-    conn = get_conn()
-    conn.execute("DELETE FROM schedule_events WHERE id = ?", (event_id,))
-    conn.commit()
-    conn.close()
-
-
-def get_schedule_trend_snapshot():
-    conn = get_conn()
-    row = conn.execute("SELECT * FROM schedule_trend_snapshot WHERE id = 1").fetchone()
+    row = conn.execute(
+        "SELECT * FROM product_profiles WHERE brand = ? AND product = ?", (brand, product)
+    ).fetchone()
     conn.close()
     return row
 
 
-def save_schedule_trend_snapshot(snapshot):
-    """snapshot: {category, range_label, mobile_pct, desktop_pct, female_pct, male_pct,
-    age_group, keywords(list[str]), series(list[{date,ratio}])} — naver_datalab.fetch_trend_snapshot()
-    가 돌려주는 그대로 넣으면 돼요."""
-    import json
+def list_product_profiles():
+    """자료실(archive_links)에 등록된 브랜드/제품 전체를, 있으면 product_profiles 속성과 합쳐서 반환.
+    반환: [{"brand","product","profile_id","category","usage_desc","problem_solved","consumer_need","keywords":[...]}]"""
+    conn = get_conn()
+    archive_rows = conn.execute(
+        "SELECT brand, product FROM archive_links WHERE product != '' ORDER BY brand, product"
+    ).fetchall()
+    profiles = {(r["brand"], r["product"]): dict(r) for r in conn.execute("SELECT * FROM product_profiles").fetchall()}
+    keywords_by_profile = {}
+    for r in conn.execute("SELECT * FROM product_keywords").fetchall():
+        keywords_by_profile.setdefault(r["product_profile_id"], []).append(r["keyword"])
+    conn.close()
 
+    result = []
+    for a in archive_rows:
+        key = (a["brand"], a["product"])
+        p = profiles.get(key)
+        result.append({
+            "brand": a["brand"],
+            "product": a["product"],
+            "profile_id": p["id"] if p else None,
+            "category": p["category"] if p else "",
+            "usage_desc": p["usage_desc"] if p else "",
+            "problem_solved": p["problem_solved"] if p else "",
+            "consumer_need": p["consumer_need"] if p else "",
+            "keywords": keywords_by_profile.get(p["id"], []) if p else [],
+            "is_filled": bool(p and (p["category"] or p["usage_desc"] or p["problem_solved"] or p["consumer_need"])),
+        })
+    return result
+
+
+def list_product_profiles_full():
+    """product_group_matches 계산 등에 쓰는, 속성이 채워진 product_profiles 원본 목록(키워드 포함)."""
+    conn = get_conn()
+    rows = [dict(r) for r in conn.execute("SELECT * FROM product_profiles").fetchall()]
+    keywords_by_profile = {}
+    for r in conn.execute("SELECT * FROM product_keywords").fetchall():
+        keywords_by_profile.setdefault(r["product_profile_id"], []).append(r["keyword"])
+    conn.close()
+    for p in rows:
+        p["keywords"] = keywords_by_profile.get(p["id"], [])
+    return rows
+
+
+def get_product_profile(profile_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM product_profiles WHERE id = ?", (profile_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def save_product_profile(brand, product, fields, keywords, updated_by):
+    """fields: {"category","usage_desc","problem_solved","consumer_need"}. keywords: 문자열 리스트(중복/공백 제거는 호출측)."""
     conn = get_conn()
     conn.execute(
-        """INSERT INTO schedule_trend_snapshot
-             (id, category, range_label, updated_at, mobile_pct, desktop_pct, female_pct, male_pct, age_group, keywords, series)
-           VALUES (1, :category, :range_label, :updated_at, :mobile_pct, :desktop_pct, :female_pct, :male_pct, :age_group, :keywords, :series)
-           ON CONFLICT(id) DO UPDATE SET
-             category=excluded.category, range_label=excluded.range_label, updated_at=excluded.updated_at,
-             mobile_pct=excluded.mobile_pct, desktop_pct=excluded.desktop_pct, female_pct=excluded.female_pct,
-             male_pct=excluded.male_pct, age_group=excluded.age_group, keywords=excluded.keywords, series=excluded.series""",
-        {
-            "category": snapshot.get("category", ""),
-            "range_label": snapshot.get("range_label", ""),
-            "updated_at": now_iso()[:10].replace("-", "."),
-            "mobile_pct": snapshot.get("mobile_pct"),
-            "desktop_pct": snapshot.get("desktop_pct"),
-            "female_pct": snapshot.get("female_pct"),
-            "male_pct": snapshot.get("male_pct"),
-            "age_group": snapshot.get("age_group", ""),
-            "keywords": ", ".join(snapshot.get("keywords") or []),
-            "series": json.dumps(snapshot.get("series") or [], ensure_ascii=False),
-        },
+        """
+        INSERT INTO product_profiles (brand, product, category, usage_desc, problem_solved, consumer_need, updated_by, updated_at)
+        VALUES (:brand, :product, :category, :usage_desc, :problem_solved, :consumer_need, :updated_by, :updated_at)
+        ON CONFLICT(brand, product) DO UPDATE SET
+            category=excluded.category, usage_desc=excluded.usage_desc,
+            problem_solved=excluded.problem_solved, consumer_need=excluded.consumer_need,
+            updated_by=excluded.updated_by, updated_at=excluded.updated_at
+        """,
+        {**fields, "brand": brand, "product": product, "updated_by": updated_by, "updated_at": now_iso()},
+    )
+    profile_id = conn.execute(
+        "SELECT id FROM product_profiles WHERE brand = ? AND product = ?", (brand, product)
+    ).fetchone()["id"]
+    conn.execute("DELETE FROM product_keywords WHERE product_profile_id = ?", (profile_id,))
+    for kw in keywords:
+        conn.execute(
+            "INSERT INTO product_keywords (product_profile_id, keyword) VALUES (?, ?)", (profile_id, kw)
+        )
+    conn.commit()
+    conn.close()
+    return profile_id
+
+
+# ---------- 트렌드 상품군(키워드 그룹) ----------
+
+def list_trend_groups():
+    """[{"id","name","category","terms":[...]}]"""
+    conn = get_conn()
+    groups = conn.execute("SELECT * FROM trend_keyword_groups ORDER BY name").fetchall()
+    terms_by_group = {}
+    for r in conn.execute("SELECT * FROM trend_keyword_group_terms").fetchall():
+        terms_by_group.setdefault(r["group_id"], []).append({"id": r["id"], "term": r["term"]})
+    conn.close()
+    return [
+        {"id": g["id"], "name": g["name"], "category": g["category"], "terms": terms_by_group.get(g["id"], [])}
+        for g in groups
+    ]
+
+
+def get_trend_group(group_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM trend_keyword_groups WHERE id = ?", (group_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def create_trend_group(name, category, created_by):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO trend_keyword_groups (name, category, created_by, created_at) VALUES (?, ?, ?, ?)",
+        (name, category, created_by, now_iso()),
+    )
+    conn.commit()
+    row = conn.execute("SELECT id FROM trend_keyword_groups WHERE name = ?", (name,)).fetchone()
+    conn.close()
+    return row["id"] if row else None
+
+
+def delete_trend_group(group_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM trend_keyword_groups WHERE id = ?", (group_id,))
+    conn.commit()
+    conn.close()
+
+
+def add_trend_group_term(group_id, term):
+    conn = get_conn()
+    conn.execute("INSERT INTO trend_keyword_group_terms (group_id, term) VALUES (?, ?)", (group_id, term))
+    conn.commit()
+    conn.close()
+
+
+def delete_trend_group_term(term_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM trend_keyword_group_terms WHERE id = ?", (term_id,))
+    conn.commit()
+    conn.close()
+
+
+def set_trend_record_group(record_id, group_id):
+    conn = get_conn()
+    conn.execute("UPDATE trend_records SET product_group_id = ? WHERE id = ?", (group_id, record_id))
+    conn.commit()
+    conn.close()
+
+
+# ---------- 검색 트렌드 원본(trend_search_raw) ----------
+
+def add_trend_search_raw(source, group_id, collected_date, index_value, raw_json=""):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO trend_search_raw (source, group_id, collected_date, index_value, raw_json, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (source, group_id, collected_date, index_value, raw_json, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_trend_search_raw(group_id=None, source=None):
+    conn = get_conn()
+    q = "SELECT * FROM trend_search_raw"
+    conds, params = [], []
+    if group_id:
+        conds.append("group_id = ?"); params.append(group_id)
+    if source:
+        conds.append("source = ?"); params.append(source)
+    if conds:
+        q += " WHERE " + " AND ".join(conds)
+    q += " ORDER BY collected_date"
+    rows = conn.execute(q, params).fetchall()
+    conn.close()
+    return rows
+
+
+# ---------- 월별 Trend Score 스냅샷 ----------
+
+def upsert_monthly_trend_score(year_month, group_id, score, rank, sources_used, metrics_json):
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO monthly_trend_scores (year_month, group_id, score, rank, sources_used, metrics_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(year_month, group_id) DO UPDATE SET
+            score=excluded.score, rank=excluded.rank, sources_used=excluded.sources_used,
+            metrics_json=excluded.metrics_json, created_at=excluded.created_at
+        """,
+        (year_month, group_id, score, rank, sources_used, metrics_json, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_monthly_trend_scores(year_month):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM monthly_trend_scores WHERE year_month = ? ORDER BY rank", (year_month,)
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def get_group_score_history(group_id, limit=12):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM monthly_trend_scores WHERE group_id = ? ORDER BY year_month DESC LIMIT ?",
+        (group_id, limit),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+# ---------- 상품군 ↔ 자사 제품 매칭 캐시 ----------
+
+def upsert_product_group_match(group_id, product_profile_id, score, matched_terms):
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO product_group_matches (group_id, product_profile_id, score, matched_terms, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(group_id, product_profile_id) DO UPDATE SET
+            score=excluded.score, matched_terms=excluded.matched_terms, updated_at=excluded.updated_at
+        """,
+        (group_id, product_profile_id, score, matched_terms, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_product_group_matches(min_score=0):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM product_group_matches WHERE score >= ? ORDER BY score DESC", (min_score,)
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+# ---------- 시딩·공구 실행 후보 ----------
+
+def create_execution_candidate(kind, product_profile_id, group_id, reason, created_by):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO execution_candidates (kind, product_profile_id, group_id, reason, created_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (kind, product_profile_id, group_id, reason, created_by, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_execution_candidates(status=None):
+    conn = get_conn()
+    q = """SELECT ec.*, pp.brand AS brand, pp.product AS product
+           FROM execution_candidates ec JOIN product_profiles pp ON pp.id = ec.product_profile_id"""
+    params = []
+    if status:
+        q += " WHERE ec.status = ?"; params.append(status)
+    q += " ORDER BY ec.id DESC"
+    rows = conn.execute(q, params).fetchall()
+    conn.close()
+    return rows
+
+
+def update_execution_candidate_status(candidate_id, status):
+    conn = get_conn()
+    conn.execute("UPDATE execution_candidates SET status = ? WHERE id = ?", (status, candidate_id))
+    conn.commit()
+    conn.close()
+
+
+# ---------- 상품기회점수 가중치 ----------
+
+def get_opportunity_weights():
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM opportunity_weights WHERE id = 1").fetchone()
+    conn.close()
+    return row
+
+
+def save_opportunity_weights(trend_w, seeding_w, gongu_w, fit_w, updated_by):
+    conn = get_conn()
+    conn.execute(
+        """UPDATE opportunity_weights SET
+             trend_weight=?, seeding_weight=?, gongu_weight=?, fit_weight=?, updated_by=?, updated_at=?
+           WHERE id = 1""",
+        (trend_w, seeding_w, gongu_w, fit_w, updated_by, now_iso()),
     )
     conn.commit()
     conn.close()

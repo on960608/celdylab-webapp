@@ -5,60 +5,17 @@
 from datetime import date, datetime
 
 BRANDS = ["코드니처", "빠이러스", "라이프스타일마트"]
-TREND_PLATFORMS = ["82market", "지금하는공구", "공구모아", "공구팡팡", "맘캘린더"]
-# 요청에 따라 공구 셀러 트렌드는 청소·주방용품·세탁 카테고리 제품만 다뤄요 (여행·식품·
-# 패션·뷰티 등은 대상이 아니에요). trend_scraper.py가 이 세 카테고리 중 하나로 분류되는
-# 제품만 수집하고, trend.py의 index()도 혹시 남아있는 다른 카테고리 기록은 화면에서
-# 걸러내요.
-TREND_CATEGORIES = ["청소", "주방용품", "세탁"]
+TREND_PLATFORMS = ["캘린", "82market", "위시버니", "지금하는공구", "인공", "공구모아"]
+TREND_CATEGORIES = ["리빙", "여행", "홈인테리어", "패션잡화", "주방용품", "생활용품", "기타"]
 
-# 공구 셀러 트렌드 자동 수집(trend_scraper.py)에서 각 사이트의 원본 카테고리 라벨과
-# 제품명에 아래 키워드가 있으면 그 카테고리로 분류해요. 사이트마다 카테고리 라벨을 아예
-# 안 주거나(82market·지금하는공구) 이 세 카테고리를 구분하지 않는 경우가 많아서, 사이트별
-# 매핑표 대신 제품명 키워드 기반으로 판단해요 — 세 카테고리 중 하나에도 안 걸리면 그 제품은
-# 대상이 아니라는 뜻으로 취급해요(자동 수집 시 제외).
-TREND_LAUNDRY_KEYWORDS = [
-    "세탁", "빨래", "건조대", "섬유유연제", "탈수기", "다림질", "다리미", "빨래집게",
-    "세탁조", "드럼세탁", "통돌이", "세탁망", "빨래바구니", "세탁볼", "세탁조클리너",
-]
-TREND_CLEANING_KEYWORDS = [
-    "청소", "세제", "걸레", "밀대", "곰팡이", "제거제", "탈취", "청소기", "물티슈",
-    "청소포", "청소용품", "락스", "표백제", "찌든때", "스퀴지", "먼지제거", "청소솔",
-]
-TREND_KITCHEN_KEYWORDS = [
-    "주방", "냄비", "프라이팬", "후라이팬", "식기", "그릇", "도마", "밀폐용기", "텀블러",
-    "보온병", "커트러리", "수저", "볼세트", "코팅팬", "냄비세트", "주방용품", "조리도구",
-    "국자", "뒤집개", "채반", "밥솥", "전기밥솥", "식기건조대",
-]
-
-
-def classify_trend_category(product_name, raw_category=""):
-    """제품명(및 사이트 원본 카테고리 라벨)에 청소/세탁/주방용품 키워드가 있으면 그
-    카테고리 이름을 돌려주고, 셋 다 아니면 None을 돌려줘요(대상 카테고리가 아니라는 뜻 —
-    호출하는 쪽에서 수집 대상에서 제외해요)."""
-    text = f"{raw_category or ''} {product_name or ''}"
-    if any(k in text for k in TREND_LAUNDRY_KEYWORDS):
-        return "세탁"
-    if any(k in text for k in TREND_CLEANING_KEYWORDS):
-        return "청소"
-    if any(k in text for k in TREND_KITCHEN_KEYWORDS):
-        return "주방용품"
-    return None
-
-# 인플루언서 공동구매(공구)가 활발히 진행되는 모니터링 대상 플랫폼 — 5개 모두 자동 수집돼요
-# (trend_scraper.py 참고). 원래는 캘린·위시버니·인공도 모니터링했지만 화면 구조상 자동
-# 수집이 불가능해서(자바스크립트로만 목록을 불러오거나 비공개 API 방식) 제외했고, 그 세
-# 자리는 SSR로 확인 가능한 공구팡팡(09pangpang.com)·맘캘린더(momcalendar.com) 두 곳으로
-# 대체했어요 — 나머지 한 자리를 대신할 만한 사이트는 끝내 찾지 못해서(대부분 비공개 API
-# 방식이거나 이 장르가 아닌 B2B 벤더/마케팅 플랫폼) 지금은 5개로 운영해요.
-# 공구모아는 원래 gonggumoa.com이었지만 그 사이트는 자바스크립트로만 목록을 불러와
-# 자동화가 불가능해서, 같은 이름을 쓰는 09more.com(자동 수집 가능)으로 대체했어요.
+# 인플루언서 공동구매(공구)가 활발히 진행되는 모니터링 대상 플랫폼
 TREND_PLATFORM_LINKS = [
-    {"name": "82market", "url": "https://www.82market.com/", "desc": "인플루언서 공구 마켓", "auto": True},
-    {"name": "지금하는공구", "url": "https://www.09now.com/", "desc": "인스타 공구 검색엔진", "auto": True},
-    {"name": "공구모아", "url": "https://www.09more.com/", "desc": "SNS 공동구매 정보 통합 모음", "auto": True},
-    {"name": "공구팡팡", "url": "https://09pangpang.com/", "desc": "인스타 최신 공구 모음", "auto": True},
-    {"name": "맘캘린더", "url": "https://momcalendar.com/", "desc": "인스타 공구 일정 캘린더", "auto": True},
+    {"name": "캘린 (Calen)", "url": "https://www.calen.co.kr/", "desc": "인플루언서 공동구매"},
+    {"name": "82market", "url": "https://www.82market.com/", "desc": "인플루언서 공구 마켓"},
+    {"name": "위시버니 (드랍)", "url": "https://www.wishbunny.me/drop", "desc": "공구 일정·알림"},
+    {"name": "지금하는공구", "url": "https://www.09now.com/", "desc": "인스타 공구 검색엔진"},
+    {"name": "인공 (IN gong)", "url": "https://insta-gong.com/category/kitchen-clean", "desc": "주방/청소 특화 인스타 공구 모음"},
+    {"name": "공구모아", "url": "https://gonggumoa.com/", "desc": "공구 일정·인기 공구 통합 모음"},
 ]
 
 
@@ -340,38 +297,6 @@ def draw_giveaway_winners(comments, event_type, keyword, winner_count, excluded_
     return winners, stats
 
 
-def build_winners_excel(event):
-    """당첨자 명단(event['winners'])을 엑셀(.xlsx) 파일로 만들어서 메모리 버퍼로 돌려줘요."""
-    import io
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "당첨자 명단"
-
-    ws.append(["순번", "Instagram 아이디", "작성 댓글", "필수 단어 포함"])
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-
-    for w in event["winners"]:
-        matched = w["keyword_matched"]
-        matched_text = "포함" if matched == 1 else ("미포함" if matched == 0 else "-")
-        ws.append([w["rank"], w["username"], w["comment_text"] or "", matched_text])
-
-    ws.column_dimensions["A"].width = 8
-    ws.column_dimensions["B"].width = 24
-    ws.column_dimensions["C"].width = 50
-    ws.column_dimensions["D"].width = 14
-    for row in ws.iter_rows(min_row=2):
-        row[2].alignment = Alignment(wrap_text=True, vertical="top")
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return buf
-
-
 def fetch_ig_comments_via_graph_api(post_url):
     """
     셀디랩이 직접 운영하는 인스타그램 비즈니스 계정에 연동된 게시물의 댓글을 Graph API로 가져와요.
@@ -442,188 +367,220 @@ def fetch_ig_comments_via_graph_api(post_url):
 
 
 # ---------------------------------------------------------------------------
-# 인스타그램 이벤트 댓글 자동 엑셀 추출
-# ---------------------------------------------------------------------------
+# 매출 기회 발굴 대시보드 — 상품군 매칭 / Trend Score / 상품기회점수
 #
-# 인스타그램은 로그인한 사용자의 브라우저에만 댓글 전체를 내려주고(비공개 내부 API +
-# 로그인 세션 쿠키 필요), 외부 웹사이트가 게시물 링크만으로 그 내부 API를 서버 간
-# 요청으로 직접 호출하는 건 인스타그램의 인증·CORS·봇 차단 정책상 막혀 있어요. 그래서
-# "게시물 링크만 입력하면 서버가 알아서 끝까지 다 가져오는" 자동화는 기술적으로
-# 불가능해요 — 이 사실을 감춘 채 일부만 가져와지는 걸 마치 전체가 된 것처럼 보여주지
-# 않기 위해, 대신 사용자가 이미 성공적으로 써봤던 방법을 그대로 자동화했어요: 브라우저
-# 개발자도구 Network 탭에서 댓글을 끝까지 스크롤해 전부 불러온 뒤 "Save all as HAR"로
-# 저장한 .har 파일을 올리면, 그 안에 담긴 모든 xdt_api_v1_media_media_id_comments_connection
-# (+ 구버전 GraphQL의 edge_media_to_parent_comment 등) 페이지네이션 응답을 자동으로 찾아
-# 모으고 댓글 ID 기준으로 중복 제거해서 엑셀로 만들어줘요. 사용자가 직접 해야 하는 유일한
-# 수작업은 "HAR 파일 저장"뿐이고, 그 안의 JSON을 일일이 열어보고 파싱하던 수작업은 이제
-# 이 서버가 대신해요.
+# 원칙: 확보하지 못한 데이터를 0이나 평균값으로 대신 채우지 않아요. 지표가 없으면
+# 계산에서 그냥 빼고, "몇 개 지표 중 몇 개로 계산됐는지"를 항상 함께 보여줘요.
+# ---------------------------------------------------------------------------
+
+OPPORTUNITY_CATEGORIES = ["리빙", "청소", "살림", "욕실", "주방", "세탁", "수납", "생활용품"]
+
+TREND_SCORE_WEIGHTS = {
+    "search_interest": 35,     # 검색 관심도 (네이버/구글 상대지수)
+    "mom_growth": 25,          # 전월 대비 상승률
+    "recent_velocity": 15,     # 최근 상승 속도
+    "platform_overlap": 15,    # 여러 공구 플랫폼 동시 등장 정도
+    "groupbuy_exposure": 10,   # 공구 시장 노출 빈도
+}
 
 
-def load_har_entries(raw_bytes):
+def _tokenize(text):
+    """아주 단순한 키워드 비교용 토크나이저 — 공백/쉼표/슬래시로 나누고 소문자화해요.
+    임베딩·형태소 분석 없이도 '겹치는 단어가 있는지'를 투명하게 설명할 수 있게 하는 게 목적이에요."""
+    text = (text or "").lower()
+    parts = re.split(r"[,\s/·]+", text)
+    return {p for p in parts if p}
+
+
+def product_group_fit_score(group_terms, product_keywords, product_text_fields):
     """
-    업로드된 .har 파일 bytes를 파싱해서 네트워크 요청 entries 목록을 돌려줘요.
-    반환: (entries, error)
+    상품군 키워드 집합과 자사 제품의 (키워드 + 카테고리/용도/문제/니즈 텍스트)를 비교해
+    0~100 적합도와 겹치는 단어 목록을 반환해요.
+    단순 제품명 일치가 아니라 카테고리/용도/문제/니즈 텍스트까지 포함해서 비교하지만,
+    AI 임베딩 기반이 아니라 '단어 겹침' 기준이라 왜 이 점수가 나왔는지 항상 설명 가능해요.
     """
-    import json
+    group_tokens = set()
+    for t in group_terms:
+        group_tokens |= _tokenize(t)
 
-    try:
-        har = json.loads(raw_bytes)
-    except Exception:
-        return None, "HAR 파일 형식을 인식하지 못했어요. 개발자도구 Network 탭에서 저장한 .har 파일이 맞는지 확인해 주세요."
+    product_tokens = set()
+    for k in product_keywords:
+        product_tokens |= _tokenize(k)
+    for f in product_text_fields:
+        product_tokens |= _tokenize(f)
 
-    entries = (((har or {}).get("log") or {}).get("entries")) or []
-    if not entries:
-        return None, "HAR 파일 안에 네트워크 요청 기록이 없어요."
-    return entries, None
+    if not group_tokens or not product_tokens:
+        return 0.0, []
 
-
-def _looks_like_comment_node(d):
-    """딕셔너리 하나가 '댓글 하나'처럼 생겼는지 판별해요 (text + 작성자 username + id 조합)."""
-    if not isinstance(d, dict):
-        return False
-    if not isinstance(d.get("text"), str):
-        return False
-    if not any(k in d for k in ("pk", "id", "comment_id", "cid")):
-        return False
-    for uk in ("user", "owner"):
-        u = d.get(uk)
-        if isinstance(u, dict) and isinstance(u.get("username"), str) and u.get("username"):
-            return True
-    return False
+    matched = group_tokens & product_tokens
+    if not matched:
+        return 0.0, []
+    score = len(matched) / len(group_tokens | product_tokens) * 100
+    return round(score, 1), sorted(matched)
 
 
-def _extract_comment_fields(d):
-    comment_id = str(d.get("pk") or d.get("id") or d.get("comment_id") or d.get("cid") or "").strip()
-    username = ""
-    for uk in ("user", "owner"):
-        u = d.get(uk)
-        if isinstance(u, dict) and u.get("username"):
-            username = u.get("username")
-            break
-    created_at = d.get("created_at") or d.get("created_at_utc") or d.get("created_time")
-    like_count = d.get("comment_like_count")
-    if like_count is None:
-        like_count = d.get("like_count")
-    if like_count is None:
-        elb = d.get("edge_liked_by")
-        if isinstance(elb, dict):
-            like_count = elb.get("count")
-    if not isinstance(like_count, int):
-        like_count = None
+def compute_trend_score(metrics):
+    """
+    metrics: {"search_interest", "mom_growth", "recent_velocity", "platform_overlap", "groupbuy_exposure"}
+    각 값은 0~100으로 이미 정규화되어 있다고 가정하고, 없는 지표(None)는 계산에서 제외해요.
+    반환: {"score": float|None, "used": [...], "missing": [...]}
+    """
+    used, missing, weighted_sum, weight_sum = [], [], 0.0, 0.0
+    for key, w in TREND_SCORE_WEIGHTS.items():
+        v = metrics.get(key)
+        if v is None:
+            missing.append(key)
+            continue
+        used.append(key)
+        weighted_sum += max(0.0, min(100.0, v)) * w
+        weight_sum += w
+    if weight_sum == 0:
+        return {"score": None, "used": used, "missing": missing}
+    return {"score": round(weighted_sum / weight_sum, 1), "used": used, "missing": missing}
+
+
+def groupbuy_exposure_metrics(records_for_group, all_platforms, days=30):
+    """
+    records_for_group: 이 상품군으로 태깅된 trend_records(dict, check_date/platform 포함) 목록.
+    반환: platform_overlap(0~100, 몇 개 플랫폼에서 동시 등장했는지 비율),
+          groupbuy_exposure(0~100, 최근 노출 빈도 기준), recent_count, platforms(set),
+          is_new(최근 처음 등장), is_recurring(서로 다른 달에 반복 등장)
+    """
+    from datetime import date, timedelta
+
+    if not records_for_group:
+        return {
+            "platform_overlap": None, "groupbuy_exposure": None,
+            "recent_count": 0, "platforms": set(), "is_new": False, "is_recurring": False,
+        }
+
+    platforms = {r["platform"] for r in records_for_group if r["platform"]}
+    platform_overlap = (len(platforms) / len(all_platforms) * 100) if all_platforms else None
+
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    recent = [r for r in records_for_group if (r["check_date"] or "") >= cutoff]
+    # 노출 빈도를 0~100으로 캡(10회 이상 등록 시 만점) — 데이터가 더 쌓이면 기준을 조정할 수 있어요.
+    groupbuy_exposure = min(len(recent) / 10 * 100, 100)
+
+    dates_sorted = sorted(r["check_date"] for r in records_for_group if r["check_date"])
+    is_new = bool(dates_sorted) and dates_sorted[0] >= cutoff
+    is_recurring = len({d[:7] for d in dates_sorted if len(d) >= 7}) >= 2
+
     return {
-        "comment_id": comment_id,
-        "username": username,
-        "text": d.get("text") or "",
-        "created_at": created_at,
-        "like_count": like_count,
+        "platform_overlap": platform_overlap,
+        "groupbuy_exposure": groupbuy_exposure,
+        "recent_count": len(recent),
+        "platforms": platforms,
+        "is_new": is_new,
+        "is_recurring": is_recurring,
     }
 
 
-def _walk_for_comments(obj, found, counter, in_comment_ctx=False):
+def summarize_groupbuy_exposure(records, groups, all_platforms):
     """
-    JSON 트리를 재귀적으로 훑으면서, 키 이름에 'comment'가 들어있는 구간(예:
-    xdt_api_v1_media_media_id_comments_connection, edge_media_to_parent_comment,
-    edge_threaded_comments 등) 안에서만 댓글 노드를 인식해요 — 캡션처럼 생김새가
-    비슷한 다른 데이터를 댓글로 잘못 인식하지 않기 위한 안전장치예요.
-    found: {comment_id: comment_dict} — 댓글 ID 기준으로 자동 중복 제거됨.
-    counter[0]: 중복 포함, 발견한 댓글 노드 총 개수(나중에 "중복 제거 개수" 계산용).
+    records: trend_records(dict) 전체, groups: trend_keyword_groups 목록.
+    상품군이 태깅된 기록만 모아 노출 지표를 계산하고, 플랫폼 동시 등장 수 -> 최근 등록 수 순으로 정렬해요.
     """
-    if isinstance(obj, dict):
-        if in_comment_ctx and _looks_like_comment_node(obj):
-            f = _extract_comment_fields(obj)
-            if f["comment_id"]:
-                counter[0] += 1
-                found[f["comment_id"]] = f
-        for k, v in obj.items():
-            child_ctx = in_comment_ctx or ("comment" in str(k).lower())
-            _walk_for_comments(v, found, counter, child_ctx)
-    elif isinstance(obj, list):
-        for v in obj:
-            _walk_for_comments(v, found, counter, in_comment_ctx)
+    summaries = []
+    for g in groups:
+        g_records = [r for r in records if r.get("product_group_id") == g["id"]]
+        if not g_records:
+            continue
+        metrics = groupbuy_exposure_metrics(g_records, all_platforms)
+        summaries.append({"group": g, "records": g_records, **metrics})
+    summaries.sort(key=lambda s: (-len(s["platforms"]), -s["recent_count"]))
+    return summaries
 
 
-def extract_comments_from_har_entry(entry, found, counter):
+def compute_group_trend_metrics(records_for_group, all_platforms, monthly_search_points):
     """
-    HAR entry(네트워크 응답) 하나에서 댓글 데이터를 찾아 found에 누적해요.
-    이 응답에서 새로 찾은 댓글이 하나라도 있으면 True를 돌려줘요.
+    한 상품군의 Trend Score 계산에 필요한 지표를 모아요.
+    monthly_search_points: [{"year_month": "YYYY-MM", "value": float}, ...] — 소스 구분 없이
+    이미 대표값으로 합쳐서 넘겨받아요(예: 네이버 있으면 네이버, 없으면 구글).
+    반환: (metrics_dict, exposure_detail)
     """
-    import base64
-    import json
+    exposure = groupbuy_exposure_metrics(records_for_group, all_platforms)
+    growth = mom_growth_and_velocity(monthly_search_points)
+    latest_search = None
+    if monthly_search_points:
+        latest_search = sorted(monthly_search_points, key=lambda p: p["year_month"])[-1]["value"]
+    metrics = {
+        "search_interest": latest_search,
+        "mom_growth": growth["mom_growth"],
+        "recent_velocity": growth["recent_velocity"],
+        "platform_overlap": exposure["platform_overlap"],
+        "groupbuy_exposure": exposure["groupbuy_exposure"],
+    }
+    return metrics, exposure
+
+
+def mom_growth_and_velocity(monthly_points):
+    """
+    monthly_points: [{"year_month": "YYYY-MM", "value": float}, ...] (순서 무관, 같은 소스 내 지수만 사용)
+    전월 대비 상승률(%)과 최근 상승 속도(0~100 정규화)를 계산해요.
+    2개 달 미만이면 계산할 수 없으니 None을 돌려줘요(임의로 0%로 채우지 않음).
+    """
+    pts = sorted([p for p in monthly_points if p.get("value") is not None], key=lambda p: p["year_month"])
+    if len(pts) < 2:
+        return {"mom_growth": None, "recent_velocity": None}
+
+    prev, last = pts[-2]["value"], pts[-1]["value"]
+    mom_growth = ((last - prev) / prev * 100) if prev else None
+
+    # 최근 상승 속도 = 최근 구간 상승률을 0~100으로 캡한 값(음수는 0으로) — 급상승 판정에만 씀
+    recent_velocity = None
+    if mom_growth is not None:
+        recent_velocity = max(0.0, min(mom_growth, 100.0))
+
+    return {"mom_growth": mom_growth, "recent_velocity": recent_velocity}
+
+
+def fetch_google_trends_for_group(group_name, terms, timeframe="today 3-m", geo="KR"):
+    """
+    Google은 공식 검색 트렌드 API가 없어서 비공식 라이브러리(pytrends)로 시도해요.
+    실패(라이브러리 미설치/네트워크 차단/일시적 차단 등)하면 예외를 삼키고 (None, 에러메시지)를 돌려줘요 —
+    이 함수가 실패해도 대시보드 전체가 죽지 않고 그냥 "구글 지표 없음"으로 처리돼요.
+    반환: (index_value 0~100 | None, error_message | None)
+    """
+    try:
+        from pytrends.request import TrendReq
+    except ImportError:
+        return None, "pytrends 라이브러리가 설치되어 있지 않아요."
 
     try:
-        content = ((entry.get("response") or {}).get("content") or {})
-        text = content.get("text")
-        if not text:
-            return False
-        if content.get("encoding") == "base64":
-            try:
-                text = base64.b64decode(text).decode("utf-8", errors="ignore")
-            except Exception:
-                return False
-        text = text.strip()
-        if not text or text[0] not in "{[":
-            return False
-        data = json.loads(text)
-    except Exception:
-        return False
-
-    before = len(found)
-    _walk_for_comments(data, found, counter, False)
-    return len(found) > before
+        pytrends = TrendReq(hl="ko-KR", tz=540)
+        keywords = (terms or [group_name])[:5]  # pytrends는 한 번에 최대 5개 키워드까지만 허용
+        pytrends.build_payload(keywords, timeframe=timeframe, geo=geo)
+        df = pytrends.interest_over_time()
+        if df is None or df.empty:
+            return None, "구글 트렌드에서 데이터를 찾지 못했어요."
+        # 여러 키워드의 최근 값 중 최댓값을 이 상품군의 대표 지수로 사용
+        latest = df.iloc[-1]
+        value = max(float(latest[k]) for k in keywords if k in latest.index)
+        return round(value, 1), None
+    except Exception as e:  # 네트워크 오류, 일시 차단(429) 등 — 보조 지표라 조용히 생략
+        return None, f"구글 트렌드 조회 실패(생략됨): {e}"
 
 
-def build_ig_comments_excel(comments):
+def compute_opportunity_score(trend_score, seeding_score, gongu_score, fit_score, weights):
     """
-    댓글 목록을 엑셀(.xlsx)로 만들어서 메모리 버퍼로 돌려줘요.
-    열: 번호 / Instagram ID / 댓글 내용 / 댓글 ID / 작성 시각 / 좋아요 수.
-    1행은 고정(freeze) + 자동 필터가 걸려 있고, 줄바꿈·이모지·한글도 그대로 저장돼요.
+    weights: {"trend_weight","seeding_weight","gongu_weight","fit_weight"} (합계가 꼭 100일 필요는 없음 — 비율로 계산)
+    각 점수 중 None인 항목은 제외하고, 남은 항목의 가중치 비율로 재계산해요.
     """
-    import io
-    from datetime import datetime, timezone, timedelta
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font
-    from openpyxl.utils import get_column_letter
-
-    def fmt_ts(value):
-        if value in (None, ""):
-            return ""
-        try:
-            ts = float(value)
-        except (TypeError, ValueError):
-            return str(value)
-        try:
-            dt = datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(timezone(timedelta(hours=9)))
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        except Exception:
-            return str(value)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "댓글"
-
-    headers = ["번호", "Instagram ID", "댓글 내용", "댓글 ID", "작성 시각", "좋아요 수"]
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = "A1:F1"
-
-    for i, c in enumerate(comments, start=1):
-        ws.append([
-            i,
-            c.get("username") or "",
-            c.get("text") or "",
-            c.get("comment_id") or "",
-            fmt_ts(c.get("created_at")),
-            c.get("like_count") if c.get("like_count") is not None else "",
-        ])
-
-    for idx, width in enumerate([8, 22, 60, 20, 20, 12], start=1):
-        ws.column_dimensions[get_column_letter(idx)].width = width
-    for row in ws.iter_rows(min_row=2):
-        row[2].alignment = Alignment(wrap_text=True, vertical="top")
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return buf
+    components = {
+        "trend": (trend_score, weights.get("trend_weight", 0)),
+        "seeding": (seeding_score, weights.get("seeding_weight", 0)),
+        "gongu": (gongu_score, weights.get("gongu_weight", 0)),
+        "fit": (fit_score, weights.get("fit_weight", 0)),
+    }
+    used, missing, weighted_sum, weight_sum = [], [], 0.0, 0.0
+    for key, (value, w) in components.items():
+        if value is None:
+            missing.append(key)
+            continue
+        used.append(key)
+        weighted_sum += value * w
+        weight_sum += w
+    if weight_sum == 0:
+        return {"score": None, "used": used, "missing": missing}
+    return {"score": round(weighted_sum / weight_sum, 1), "used": used, "missing": missing}

@@ -49,7 +49,7 @@ def login():
             session.clear()
             session["user_id"] = emp["id"]
             session["user_name"] = emp["name"]
-            next_url = request.args.get("next") or url_for("archive")
+            next_url = request.args.get("next") or url_for("dashboard.index")
             return redirect(next_url)
         flash("아이디 또는 비밀번호가 맞지 않아요.")
     return render_template("login.html")
@@ -68,7 +68,7 @@ def logout():
 @app.route("/")
 @login_required
 def index():
-    return redirect(url_for("archive"))
+    return redirect(url_for("dashboard.index"))
 
 
 def drive_search_url(q):
@@ -137,31 +137,6 @@ def employees_add():
     return redirect(url_for("employees"))
 
 
-@app.route("/employees/<int:emp_id>/rename", methods=["POST"])
-@login_required
-def employees_rename(emp_id):
-    new_username = request.form.get("new_username", "").strip()
-    emp = db.get_employee_by_id(emp_id)
-
-    if not emp:
-        flash("계정을 찾을 수 없어요.")
-        return redirect(url_for("employees"))
-    if not new_username:
-        flash("새 아이디를 입력해 주세요.")
-        return redirect(url_for("employees"))
-    if new_username == emp["username"]:
-        return redirect(url_for("employees"))
-
-    existing = db.get_employee_by_username(new_username)
-    if existing and existing["id"] != emp_id:
-        flash(f"이미 '{new_username}' 아이디가 있어요.")
-        return redirect(url_for("employees"))
-
-    db.update_employee_username(emp_id, new_username)
-    flash(f"아이디를 '{emp['username']}'에서 '{new_username}'(으)로 바꿨어요.")
-    return redirect(url_for("employees"))
-
-
 @app.route("/employees/<int:emp_id>/delete", methods=["POST"])
 @login_required
 def employees_delete(emp_id):
@@ -184,16 +159,16 @@ from gongu import gongu_bp
 from listup import listup_bp
 from trend import trend_bp
 from giveaway import giveaway_bp
-from igcomments import igcomments_bp
-from schedule import schedule_bp
+from products import products_bp
+from dashboard import dashboard_bp
 
 app.register_blueprint(insight_bp)
 app.register_blueprint(gongu_bp)
 app.register_blueprint(listup_bp)
 app.register_blueprint(trend_bp)
 app.register_blueprint(giveaway_bp)
-app.register_blueprint(igcomments_bp)
-app.register_blueprint(schedule_bp)
+app.register_blueprint(products_bp)
+app.register_blueprint(dashboard_bp)
 
 
 # ---------------------------------------------------------------------------
