@@ -38,6 +38,11 @@ def _migrate(conn):
         # 무결성은 애플리케이션 코드(db.py)에서 관리해요.
         conn.execute("ALTER TABLE trend_records ADD COLUMN product_group_id INTEGER")
 
+    group_cols = {row["name"] for row in conn.execute("PRAGMA table_info(trend_keyword_groups)").fetchall()}
+    if "shopping_category" not in group_cols:
+        # 네이버 쇼핑인사이트 API 호출에 필요한 카테고리 코드(예: "50000006"). 선택 항목이라 비워둘 수 있어요.
+        conn.execute("ALTER TABLE trend_keyword_groups ADD COLUMN shopping_category TEXT DEFAULT ''")
+
     # 상품기회점수 가중치는 항상 정확히 한 행(id=1)이 있어야 화면에서 바로 읽고 조정할 수 있어요.
     conn.execute(
         "INSERT OR IGNORE INTO opportunity_weights (id, trend_weight, seeding_weight, gongu_weight, fit_weight, updated_at) "
@@ -548,7 +553,11 @@ def list_trend_groups():
         terms_by_group.setdefault(r["group_id"], []).append({"id": r["id"], "term": r["term"]})
     conn.close()
     return [
-        {"id": g["id"], "name": g["name"], "category": g["category"], "terms": terms_by_group.get(g["id"], [])}
+        {
+            "id": g["id"], "name": g["name"], "category": g["category"],
+            "shopping_category": g["shopping_category"] or "",
+            "terms": terms_by_group.get(g["id"], []),
+        }
         for g in groups
     ]
 
@@ -575,6 +584,17 @@ def create_trend_group(name, category, created_by):
 def delete_trend_group(group_id):
     conn = get_conn()
     conn.execute("DELETE FROM trend_keyword_groups WHERE id = ?", (group_id,))
+    conn.commit()
+    conn.close()
+
+
+def set_trend_group_shopping_category(group_id, shopping_category):
+    """이 상품군을 네이버 쇼핑인사이트 카테고리(코드)에 연결해요. 빈 문자열이면 연결 해제예요."""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE trend_keyword_groups SET shopping_category = ? WHERE id = ?",
+        (shopping_category or "", group_id),
+    )
     conn.commit()
     conn.close()
 

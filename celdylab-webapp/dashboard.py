@@ -19,7 +19,7 @@ from analysis import (
     TREND_PLATFORMS, OPPORTUNITY_CATEGORIES,
     summarize_groupbuy_exposure, compute_group_trend_metrics, compute_trend_score,
     compute_opportunity_score, product_group_fit_score, fetch_google_trends_for_group,
-    fetch_naver_trends_for_group,
+    fetch_naver_trends_for_group, fetch_naver_shopping_keyword_trend,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
@@ -63,6 +63,29 @@ def _monthly_points_for_group(group_id):
         if value is not None:
             points.append({"year_month": month, "value": value})
     return points
+
+
+_SOURCE_LABELS = {"naver_search": "네이버 검색어트렌드", "naver_shopping": "네이버 쇼핑인사이트", "google": "구글 트렌드(보조)"}
+
+
+def _chart_series_for_group(group_id):
+    """그래프용 — 소스를 하나로 합치지 않고, 소스별로 따로따로 월별 지수를 돌려줘요.
+    반환: [{"label": "네이버 검색어트렌드", "points": [{"year_month":..., "value":...}, ...]}, ...]
+    (데이터가 있는 소스만 포함돼요. 하나도 없으면 빈 리스트.)"""
+    raw = db.list_trend_search_raw(group_id=group_id)
+    by_source = {}
+    for r in raw:
+        if not r["collected_date"] or r["index_value"] is None:
+            continue
+        by_source.setdefault(r["source"], []).append(
+            {"year_month": r["collected_date"][:7], "value": r["index_value"]}
+        )
+    series = []
+    for source in ("naver_search", "naver_shopping", "google"):
+        points = sorted(by_source.get(source, []), key=lambda p: p["year_month"])
+        if points:
+            series.append({"label": _SOURCE_LABELS[source], "points": points})
+    return series
 
 
 def _compute_all_group_scores():
@@ -216,6 +239,7 @@ def trend_detail():
     prev_ym = _prev_year_month(ym)
     prev_scores = {r["group_id"]: r for r in db.get_monthly_trend_scores(prev_ym)}
     rows = []
+    chart_data = {}
     for rank, r in enumerate(scored, start=1):
         prev = prev_scores.get(r["group"]["id"])
         rows.append({
@@ -223,7 +247,13 @@ def trend_detail():
             "used": r["score_result"]["used"], "missing": r["score_result"]["missing"],
             "metrics": r["metrics"], "prev_rank": prev["rank"] if prev else None,
         })
-    return render_template("dashboard_trend.html", rows=rows, current_year_month=ym, naver_configured=_naver_configured())
+        series = _chart_series_for_group(r["group"]["id"])
+        if series:
+            chart_data[r["group"]["id"]] = series
+    return render_template(
+        "dashboard_trend.html", rows=rows, current_year_month=ym,
+        naver_configured=_naver_configured(), chart_data=chart_data,
+    )
 
 
 @dashboard_bp.route("/rising")
@@ -352,8 +382,27 @@ def collect_naver():
         else:
             failed += 1
             messages.append(f"{g['name']}: {err}")
+
+    # 쇼핑인사이트는 "쇼핑 카테고리"를 지정해둔 상품군만 수집돼요 (설정 안 했으면 조용히 건너뜀).
+    shop_ok, shop_failed, shop_points = 0, 0, 0
+    for g in groups:
+        if not g.get("shopping_category"):
+            continue
+        terms = [t["term"] for t in g["terms"]] or [g["name"]]
+        points, err = fetch_naver_shopping_keyword_trend(g["shopping_category"], g["name"], terms)
+        if points:
+            for p in points:
+                db.add_trend_search_raw("naver_shopping", g["id"], f"{p['year_month']}-01", p["value"])
+            shop_points += len(points)
+            shop_ok += 1
+        else:
+            shop_failed += 1
+            messages.append(f"[쇼핑인사이트] {g['name']}: {err}")
+
+    shop_msg = f" · 쇼핑인사이트 성공 {shop_ok}개/실패 {shop_failed}건({shop_points}개월치)" if (shop_ok or shop_failed) else ""
     flash(
         f"네이버 검색어트렌드 수집 완료 — 성공 {ok}개 상품군 / 실패 {failed}건 (총 {total_points}개월치 저장)"
+        + shop_msg
         + (f" · {messages[0]}" if messages else "")
     )
     return redirect(url_for("dashboard.settings"))

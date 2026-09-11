@@ -3,7 +3,10 @@ import os
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
 
 import db
-from analysis import TREND_PLATFORMS, TREND_CATEGORIES, TREND_PLATFORM_LINKS, OPPORTUNITY_CATEGORIES, summarize_groupbuy_exposure
+from analysis import (
+    TREND_PLATFORMS, TREND_CATEGORIES, TREND_PLATFORM_LINKS, OPPORTUNITY_CATEGORIES,
+    NAVER_SHOPPING_CATEGORIES, summarize_groupbuy_exposure,
+)
 
 trend_bp = Blueprint("trend", __name__, url_prefix="/trend")
 
@@ -117,21 +120,39 @@ def tag(record_id):
 
 @trend_bp.route("/groups")
 def groups_index():
-    return render_template("trend_groups.html", groups=db.list_trend_groups(), categories=OPPORTUNITY_CATEGORIES)
+    code_to_name = {code: name for name, code in NAVER_SHOPPING_CATEGORIES}
+    groups = db.list_trend_groups()
+    for g in groups:
+        g["shopping_category_label"] = code_to_name.get(g.get("shopping_category"))
+    return render_template(
+        "trend_groups.html", groups=groups, categories=OPPORTUNITY_CATEGORIES,
+        shopping_categories=NAVER_SHOPPING_CATEGORIES,
+    )
 
 
 @trend_bp.route("/groups/add", methods=["POST"])
 def groups_add():
     name = request.form.get("name", "").strip()
     category = request.form.get("category", "").strip()
+    shopping_category = request.form.get("shopping_category", "").strip()
     if not name:
         flash("상품군 이름을 입력해 주세요.")
         return redirect(url_for("trend.groups_index"))
     group_id = db.create_trend_group(name, category, session.get("user_name"))
+    if shopping_category:
+        db.set_trend_group_shopping_category(group_id, shopping_category)
     terms_raw = request.form.get("terms", "")
     for term in [t.strip() for t in terms_raw.split(",") if t.strip()]:
         db.add_trend_group_term(group_id, term)
     flash(f"상품군 '{name}'을(를) 만들었어요.")
+    return redirect(url_for("trend.groups_index"))
+
+
+@trend_bp.route("/groups/<int:group_id>/shopping-category", methods=["POST"])
+def groups_set_shopping_category(group_id):
+    shopping_category = request.form.get("shopping_category", "").strip()
+    db.set_trend_group_shopping_category(group_id, shopping_category)
+    flash("네이버 쇼핑 카테고리를 저장했어요." if shopping_category else "네이버 쇼핑 카테고리 연결을 해제했어요.")
     return redirect(url_for("trend.groups_index"))
 
 

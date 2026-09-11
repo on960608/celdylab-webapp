@@ -625,6 +625,159 @@ def fetch_naver_trends_for_group(group_name, terms, months=6):
     return points, None
 
 
+# ---------------------------------------------------------------------------
+# 네이버 데이터랩 "쇼핑인사이트" — 검색어트렌드와는 별도의 공식 API예요.
+# 쇼핑 화면에서의 검색/구매 관심도를 보여줘서, 일반 검색어트렌드보다 "사길 원하는 관심도"에 더 가까워요.
+# 이 API는 카테고리(분야) 코드가 반드시 필요해요 — 네이버가 정해둔 대분류 코드를 그대로 써요.
+# (공개된 자료 기준으로 정리한 목록이라, 네이버가 코드를 바꾸면 그 카테고리만 조용히 실패해요 —
+#  다른 카테고리나 대시보드 전체에는 영향 없어요.)
+# ---------------------------------------------------------------------------
+NAVER_SHOPPING_CATEGORIES = [
+    ("패션의류", "50000000"),
+    ("패션잡화", "50000001"),
+    ("화장품/미용", "50000002"),
+    ("디지털/가전", "50000003"),
+    ("가구/인테리어", "50000004"),
+    ("출산/육아", "50000005"),
+    ("식품", "50000006"),
+    ("스포츠/레저", "50000007"),
+    ("생활/건강", "50000008"),
+    ("여가/생활편의", "50000009"),
+]
+
+
+def _naver_shopping_date_range(months):
+    from datetime import date as _date
+    end = _date.today()
+    y, m = end.year, end.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    start = _date(y, m, 1)
+    return start.isoformat(), end.isoformat()
+
+
+def fetch_naver_shopping_keyword_trend(category_code, group_name, terms, months=6):
+    """
+    네이버 데이터랩 쇼핑인사이트 - "카테고리 내 키워드별 트렌드" API(공식)를 호출해요.
+    지정한 쇼핑 카테고리 "안에서" 이 키워드들이 얼마나 검색/조회되는지 월별 상대지수(0~100)로 받아와요.
+    category_code가 없으면(상품군에 쇼핑 카테고리를 아직 지정하지 않았으면) 바로 안내 메시지를 돌려줘요.
+    반환: (points, error) — points: [{"year_month": "YYYY-MM", "value": float}, ...]
+    """
+    import os
+    import json as _json
+
+    if not category_code:
+        return [], "이 상품군에 네이버 쇼핑 카테고리가 지정되어 있지 않아요."
+
+    client_id = os.environ.get("NAVER_CLIENT_ID")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        return [], "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET이 설정되어 있지 않아요."
+
+    keywords = (terms or [group_name])[:20]
+    start_date, end_date = _naver_shopping_date_range(months)
+
+    cat_value = int(category_code) if str(category_code).isdigit() else category_code
+    payload = {
+        "startDate": start_date,
+        "endDate": end_date,
+        "timeUnit": "month",
+        "category": cat_value,
+        "keyword": [{"name": group_name, "param": keywords}],
+        "device": "",
+        "gender": "",
+        "ages": [],
+    }
+    headers = {
+        "X-Naver-Client-Id": client_id,
+        "X-Naver-Client-Secret": client_secret,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        import requests
+        resp = requests.post(
+            "https://openapi.naver.com/v1/datalab/shopping/category/keywords",
+            headers=headers, data=_json.dumps(payload), timeout=10,
+        )
+    except Exception as e:
+        return [], f"네이버 쇼핑인사이트 요청 중 오류: {e}"
+
+    if resp.status_code != 200:
+        return [], f"네이버 쇼핑인사이트 오류(status {resp.status_code}): {resp.text[:200]}"
+
+    try:
+        data = resp.json()
+        result = data["results"][0]
+        points = [
+            {"year_month": d["period"][:7], "value": float(d["ratio"])}
+            for d in result.get("data", [])
+        ]
+    except Exception as e:
+        return [], f"네이버 쇼핑인사이트 응답을 해석하지 못했어요: {e}"
+
+    return points, None
+
+
+def fetch_naver_shopping_category_trend(category_code, category_name="", months=6):
+    """
+    네이버 데이터랩 쇼핑인사이트 - "분야(카테고리) 전체 트렌드" API(공식)를 호출해요.
+    특정 키워드가 아니라 그 쇼핑 카테고리 전체의 관심도 흐름을 보여줘요(비교 기준선으로 유용해요).
+    반환: (points, error)
+    """
+    import os
+    import json as _json
+
+    if not category_code:
+        return [], "카테고리 코드가 없어요."
+
+    client_id = os.environ.get("NAVER_CLIENT_ID")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        return [], "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET이 설정되어 있지 않아요."
+
+    start_date, end_date = _naver_shopping_date_range(months)
+    payload = {
+        "startDate": start_date,
+        "endDate": end_date,
+        "timeUnit": "month",
+        "category": [{"name": category_name or str(category_code), "param": [str(category_code)]}],
+        "device": "",
+        "gender": "",
+        "ages": [],
+    }
+    headers = {
+        "X-Naver-Client-Id": client_id,
+        "X-Naver-Client-Secret": client_secret,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        import requests
+        resp = requests.post(
+            "https://openapi.naver.com/v1/datalab/shopping/categories",
+            headers=headers, data=_json.dumps(payload), timeout=10,
+        )
+    except Exception as e:
+        return [], f"네이버 쇼핑인사이트 요청 중 오류: {e}"
+
+    if resp.status_code != 200:
+        return [], f"네이버 쇼핑인사이트 오류(status {resp.status_code}): {resp.text[:200]}"
+
+    try:
+        data = resp.json()
+        result = data["results"][0]
+        points = [
+            {"year_month": d["period"][:7], "value": float(d["ratio"])}
+            for d in result.get("data", [])
+        ]
+    except Exception as e:
+        return [], f"네이버 쇼핑인사이트 응답을 해석하지 못했어요: {e}"
+
+    return points, None
+
+
 def compute_opportunity_score(trend_score, seeding_score, gongu_score, fit_score, weights):
     """
     weights: {"trend_weight","seeding_weight","gongu_weight","fit_weight"} (합계가 꼭 100일 필요는 없음 — 비율로 계산)
