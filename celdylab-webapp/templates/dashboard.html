@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}매출 기회 발굴 대시보드 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">OPPORTUNITY · DASHBOARD · {{ current_year_month }}</div>
+  <h2>매출 기회 발굴 대시보드</h2>
+  <p>외부 트렌드 발견 → 상품군 분석 → 자사 제품 매칭 → 시딩·공구 실행 → 매출 확인까지 한 화면에서 이어져요. 각 카드를 누르면 상세 분석 페이지로 이동해요.
+  <a href="{{ url_for('products.index') }}">자사 제품 정보 관리</a> · <a href="{{ url_for('trend.groups_index') }}">상품군 관리</a> · <a href="{{ url_for('dashboard.settings') }}">데이터 연동/가중치 설정</a></p>
+</div>
+
+{% if not naver_configured %}
+<div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+  <p class="note" style="margin:0">⚠ 네이버 검색어트렌드 API가 아직 연동되지 않았어요. 아래 ①②⑤ 카드는 구글 트렌드(보조 지표)만으로 계산되거나, 데이터가 없으면 비어 있을 수 있어요. <a href="{{ url_for('dashboard.settings') }}">연동 방법 보기 →</a></p>
+</div>
+{% endif %}
+
+<!-- ① 이번 달 트렌드 상품 TOP5 -->
+<a href="{{ url_for('dashboard.trend_detail') }}" style="text-decoration:none;color:inherit">
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">①</div><h3>이번 달 트렌드 상품 TOP 5</h3><div class="unit">확보된 지표(검색 관심도·상승률·공구 노출 등)로만 계산돼요.</div></div></div>
+  <div class="top10-list">
+    {% for t in trend_top5 %}
+      <div class="top10-row">
+        <span class="top10-rank">{{ '🥇' if t.rank==1 else '🥈' if t.rank==2 else '🥉' if t.rank==3 else t.rank }}</span>
+        <div class="top10-info">
+          <div class="top10-name">{{ t.group.name }}</div>
+          <div class="top10-sub">
+            {% if t.prev_rank %}지난달 {{ t.prev_rank }}위 → 이번달 {{ t.rank }}위 {{ '↑' if t.prev_rank > t.rank else ('↓' if t.prev_rank < t.rank else '-') }}{{ (t.prev_rank - t.rank)|abs if t.prev_rank != t.rank else '' }}
+            {% else %}신규 진입{% endif %}
+            · {{ t.used|length }}개 지표로 계산됨
+          </div>
+        </div>
+        <div class="top10-meta"><span class="top10-metric rank">{{ t.score }}점</span></div>
+      </div>
+    {% else %}
+      <p class="note" style="margin:0">아직 표시할 트렌드 데이터가 없어요. 상품군을 만들고(<a href="{{ url_for('trend.groups_index') }}">상품군 관리</a>), 네이버/구글 트렌드를 연동하면 여기에 나타나요.</p>
+    {% endfor %}
+  </div>
+</div>
+</a>
+
+<!-- ② 급상승 상품 -->
+<a href="{{ url_for('dashboard.rising_detail') }}" style="text-decoration:none;color:inherit">
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">②</div><h3>🔥 급상승 상품</h3><div class="unit">전월 대비 검색 지수가 실제로 상승한 상품군만 보여줘요(최소 2개월치 데이터 필요).</div></div></div>
+  <div class="top10-list">
+    {% for r in rising %}
+      <div class="top10-row">
+        <span class="top10-rank">↑</span>
+        <div class="top10-info">
+          <div class="top10-name">{{ r.group.name }}</div>
+          <div class="top10-sub">전월 대비 +{{ r.metrics.mom_growth|round(1) }}%</div>
+        </div>
+      </div>
+    {% else %}
+      <p class="note" style="margin:0">아직 2개월치 검색 데이터가 쌓이지 않아 급상승 여부를 판단할 수 없어요.</p>
+    {% endfor %}
+  </div>
+</div>
+</a>
+
+<!-- ③ 시딩·공구 추천 자사제품 TOP5 -->
+<a href="{{ url_for('dashboard.recommend_detail') }}" style="text-decoration:none;color:inherit">
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">③</div><h3>🎯 이번 달 시딩·공구 추천 자사제품 TOP 5</h3><div class="unit">트렌드 점수(있으면) + 자사 제품 적합도를 조합해요.</div></div></div>
+  <div class="top10-list">
+    {% for r in recommend_top5 %}
+      <div class="top10-row">
+        <span class="top10-rank">{{ loop.index }}</span>
+        <div class="top10-info">
+          <div class="top10-name">{{ r.profile.brand }} · {{ r.profile.product }}</div>
+          <div class="top10-sub">{{ r.group.name }} 상품군 적합도 {{ r.score }}%{{ ' · 트렌드 ' + r.trend_score|string + '점' if r.trend_score is not none else ' · 트렌드 데이터 없음(적합도만 반영)' }}</div>
+        </div>
+        <div class="top10-meta"><span class="top10-metric rank">{{ r.combo_score }}점</span></div>
+      </div>
+    {% else %}
+      <p class="note" style="margin:0"><a href="{{ url_for('products.index') }}">자사 제품 정보</a>와 <a href="{{ url_for('trend.groups_index') }}">상품군</a>을 등록하면 매칭 결과가 여기에 나타나요.</p>
+    {% endfor %}
+  </div>
+  <p class="note">자세히 보기에서 [시딩 후보 등록] / [공구 후보 등록] 버튼으로 실제 업무에 바로 연결할 수 있어요.</p>
+</div>
+</a>
+
+<!-- ④ 공구 시장에서 많이 등장하는 상품 -->
+<a href="{{ url_for('dashboard.groupbuy_detail') }}" style="text-decoration:none;color:inherit">
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">④</div><h3>공구 시장에서 많이 등장하는 상품</h3><div class="unit">6개 공구 플랫폼 등록 기록 기준(출처별로 원본을 구분해서 보존해요).</div></div></div>
+  <div class="top10-list">
+    {% for s in groupbuy_top %}
+      <div class="top10-row">
+        <span class="top10-rank">{{ loop.index }}</span>
+        <div class="top10-info">
+          <div class="top10-name">{{ s.group.name }}{% if s.is_new %} <span class="ins-badge contact">신규</span>{% endif %}{% if s.is_recurring %} <span class="ins-badge pass">반복</span>{% endif %}</div>
+          <div class="top10-sub">{{ s.platforms|length }}개 플랫폼에서 확인 · 최근 30일 {{ s.recent_count }}건</div>
+        </div>
+      </div>
+    {% else %}
+      <p class="note" style="margin:0"><a href="{{ url_for('trend.index') }}">외부몰 트렌드 분석</a>에서 기록에 상품군을 지정하면 여기에 나타나요.</p>
+    {% endfor %}
+  </div>
+</div>
+</a>
+
+<!-- ⑤ 전월 대비 가장 많이 상승한 카테고리 -->
+<a href="{{ url_for('dashboard.categories_detail') }}" style="text-decoration:none;color:inherit">
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">⑤</div><h3>전월 대비 가장 많이 상승한 카테고리</h3><div class="unit">리빙/청소/살림/욕실/주방/세탁/수납/생활용품 카테고리 평균 Trend Score 기준.</div></div></div>
+  <div class="top10-list">
+    {% for c in category_rising %}
+      <div class="top10-row">
+        <span class="top10-rank">{{ loop.index }}</span>
+        <div class="top10-info">
+          <div class="top10-name">{{ c.category }}</div>
+          <div class="top10-sub">{{ c.prev_avg }}점 → {{ c.cur_avg }}점</div>
+        </div>
+        <div class="top10-meta"><span class="top10-metric {{ 'rank' if c.delta >= 0 else '' }}">{{ '+' if c.delta >= 0 else '' }}{{ c.delta }}</span></div>
+      </div>
+    {% else %}
+      <p class="note" style="margin:0">지난달과 이번달 데이터가 모두 있어야 비교할 수 있어요. 다음 달부터 표시돼요.</p>
+    {% endfor %}
+  </div>
+</div>
+</a>
+
+<!-- ⑥ 진행 중인 시딩/공구 + 매출 -->
+<a href="{{ url_for('dashboard.progress_detail') }}" style="text-decoration:none;color:inherit">
+<div class="chart-card">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">⑥</div><h3>진행 중인 시딩·공구 & 매출 성과</h3><div class="unit">실행 후보로 등록한 제품의 실제 시딩 인사이트·공구 매출 데이터예요.</div></div></div>
+  <div class="top10-list">
+    {% for p in progress %}
+      <div class="top10-row">
+        <span class="top10-rank">{{ '🌱' if p.candidate.kind == 'seeding' else '🛒' }}</span>
+        <div class="top10-info">
+          <div class="top10-name">{{ p.candidate.brand }} · {{ p.candidate.product }}</div>
+          <div class="top10-sub">상태: {{ p.candidate.status }} · 시딩 기록 {{ p.insight_count }}건 · 공구 회차 {{ p.gongu_count }}건</div>
+        </div>
+        <div class="top10-meta"><span class="top10-metric rank">{{ '{:,}'.format(p.revenue) }}원</span></div>
+      </div>
+    {% else %}
+      <p class="note" style="margin:0">아직 등록된 실행 후보가 없어요. ③ 추천 목록에서 [시딩 후보 등록]/[공구 후보 등록]으로 시작해 보세요.</p>
+    {% endfor %}
+  </div>
+</div>
+</a>
+{% endblock %}

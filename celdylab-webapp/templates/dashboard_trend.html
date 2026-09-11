@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}이번 달 트렌드 상품 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">OPPORTUNITY · {{ current_year_month }}</div>
+  <h2>① 이번 달 트렌드 상품 전체 순위</h2>
+  <p><a href="{{ url_for('dashboard.index') }}">← 대시보드로</a></p>
+  {% if not naver_configured %}<p class="note">⚠ 네이버 API 미연동 — 지금은 공구 시장 노출/구글 트렌드(연동 시)로만 계산돼요.</p>{% endif %}
+</div>
+
+<div class="chart-card">
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>순위</th><th>상품군</th><th>점수</th><th>사용된 지표</th><th>없는 지표</th><th>지난달 순위</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.rank }}</td>
+          <td>{{ r.group.name }}</td>
+          <td>{{ r.score }}점</td>
+          <td>{{ r.used|join(', ') if r.used else '-' }}</td>
+          <td style="color:var(--muted2)">{{ r.missing|join(', ') if r.missing else '-' }}</td>
+          <td>{{ r.prev_rank if r.prev_rank else '신규' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="text-align:center;color:var(--muted2);padding:20px 0">아직 점수를 계산할 수 있는 상품군이 없어요.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="note">지표: search_interest(검색 관심도) · mom_growth(전월 대비 상승률) · recent_velocity(최근 상승 속도) · platform_overlap(플랫폼 동시 등장) · groupbuy_exposure(공구 노출). 확보되지 않은 지표는 점수 계산에서 빠지고 위 "없는 지표"에 표시돼요.</p>
+</div>
+{% endblock %}

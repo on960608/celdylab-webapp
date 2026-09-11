@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}급상승 상품 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">OPPORTUNITY</div>
+  <h2>🔥 급상승 상품</h2>
+  <p><a href="{{ url_for('dashboard.index') }}">← 대시보드로</a> · 전월 대비 검색 지수가 상승한 상품군을 상승률 순으로 보여줘요. 아직 기존 검색량이 낮아도, 상승 속도가 빠르면 경쟁사보다 먼저 시딩을 시작할 근거가 될 수 있어요.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="top10-list">
+    {% for r in rising %}
+      <div class="top10-row">
+        <span class="top10-rank">↑</span>
+        <div class="top10-info">
+          <div class="top10-name">{{ r.group.name }}</div>
+          <div class="top10-sub">전월 대비 +{{ r.metrics.mom_growth|round(1) }}% · 포함 검색어: {{ r.group.terms|map(attribute='term')|join(', ') if r.group.terms else '-' }}</div>
+        </div>
+      </div>
+    {% else %}
+      <div class="soon-box"><b>아직 급상승으로 판정할 데이터가 없어요.</b>전월 대비 상승률을 계산하려면 같은 상품군에 대해 최소 2개월치 검색 지수가 필요해요.</div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if no_history_count %}
+<p class="note">{{ no_history_count }}개 상품군은 아직 검색 데이터 자체가 없거나 1개월치뿐이라 상승률을 계산할 수 없어요.</p>
+{% endif %}
+{% endblock %}

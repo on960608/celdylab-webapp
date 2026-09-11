@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}시딩·공구 추천 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">OPPORTUNITY</div>
+  <h2>🎯 이번 달 시딩·공구 추천 자사제품</h2>
+  <p><a href="{{ url_for('dashboard.index') }}">← 대시보드로</a> · 트렌드 점수(있으면)와 자사 제품 적합도를 조합한 추천 순위예요. 마음에 드는 제품은 바로 실행 후보로 등록해서 진행 현황(⑥)에서 추적할 수 있어요.</p>
+</div>
+
+{% for r in rows %}
+  <div class="chart-card" style="margin-bottom:12px">
+    <div class="chart-card-head" style="align-items:center">
+      <div>
+        <h3>{{ loop.index }}위 · {{ r.profile.brand }} · {{ r.profile.product }}</h3>
+        <div class="unit">
+          추천 이유:
+          {% if r.trend_score is not none %}트렌드 점수 {{ r.trend_score }}점 · {% endif %}
+          자사제품 적합도 {{ r.score }}% (겹치는 키워드: {{ r.matched|join(', ') if r.matched else '-' }})
+          {% if r.trend_score is none %}· <span style="color:var(--muted2)">트렌드 데이터 미확보 — 적합도만 반영된 점수예요</span>{% endif %}
+        </div>
+      </div>
+      <div class="top10-metric rank" style="font-size:16px">{{ r.combo_score }}점</div>
+    </div>
+    <form method="post" action="{{ url_for('dashboard.add_candidate') }}" style="display:flex;gap:8px;margin-top:12px">
+      <input type="hidden" name="product_profile_id" value="{{ r.profile.id }}">
+      <input type="hidden" name="group_id" value="{{ r.group.id }}">
+      <input type="hidden" name="reason" value="{{ r.group.name }} 상품군 적합도 {{ r.score }}%{{ ' / 트렌드 ' + r.trend_score|string + '점' if r.trend_score is not none else '' }}">
+      <button class="refresh-btn" type="submit" name="kind" value="seeding">🌱 시딩 후보 등록</button>
+      <button class="refresh-btn" type="submit" name="kind" value="gongu">🛒 공구 후보 등록</button>
+    </form>
+  </div>
+{% else %}
+  <div class="soon-box"><b>아직 추천할 수 있는 제품이 없어요.</b><a href="{{ url_for('products.index') }}">자사 제품 정보</a>와 <a href="{{ url_for('trend.groups_index') }}">상품군</a>을 먼저 등록해 주세요. 키워드가 하나라도 겹쳐야 추천 목록에 나타나요.</div>
+{% endfor %}
+{% endblock %}

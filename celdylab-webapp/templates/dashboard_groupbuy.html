@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}공구 시장 트렌드 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">OPPORTUNITY</div>
+  <h2>공구 시장에서 많이 등장하는 상품</h2>
+  <p><a href="{{ url_for('dashboard.index') }}">← 대시보드로</a> · {{ platforms|join(' · ') }} 6개 플랫폼에서 확인한 기록을 상품군 기준으로 모았어요. 플랫폼별 원본은 아래 펼치면 그대로 볼 수 있어요(섞지 않고 출처를 유지해요).</p>
+</div>
+
+{% for s in summaries %}
+  <div class="chart-card" style="margin-bottom:12px">
+    <div class="chart-card-head">
+      <div>
+        <h3>{{ s.group.name }} {% if s.is_new %}<span class="ins-badge contact">신규 등장</span>{% endif %}{% if s.is_recurring %}<span class="ins-badge pass">반복 등장</span>{% endif %}</h3>
+        <div class="unit">{{ s.platforms|length }} / {{ platforms|length }}개 플랫폼에서 확인 · 최근 30일 {{ s.recent_count }}건 · 전체 {{ s.records|length }}건</div>
+      </div>
+    </div>
+    <details style="margin-top:8px">
+      <summary class="folder-edit-btn">원본 기록 보기 ({{ s.records|length }}건)</summary>
+      <div class="chart-svg-wrap" style="margin-top:8px">
+        <table class="data-table">
+          <thead><tr><th>확인일</th><th>플랫폼(원본 출처)</th><th>셀러</th><th>제품</th><th>공구가</th></tr></thead>
+          <tbody>
+            {% for r in s.records|sort(attribute='check_date', reverse=True) %}
+            <tr><td>{{ r.check_date or '-' }}</td><td>{{ r.platform or '-' }}</td><td>{{ r.seller or '-' }}</td><td>{{ r.product or '-' }}</td><td>{{ '{:,}'.format(r.price) + '원' if r.price else '-' }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+{% else %}
+  <div class="soon-box"><b>상품군이 지정된 기록이 없어요.</b><a href="{{ url_for('trend.index') }}">외부몰 트렌드 분석</a>에서 등록된 기록에 상품군을 지정해 주세요.</div>
+{% endfor %}
+{% endblock %}

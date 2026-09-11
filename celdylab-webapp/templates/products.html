@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}자사 제품 정보 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">OPPORTUNITY · PRODUCT PROFILE</div>
+  <h2>자사 제품 정보</h2>
+  <p>매출 기회 발굴 대시보드가 외부 트렌드와 자사 제품을 자동으로 연결하려면, 제품마다 카테고리·용도·해결하는 문제·소비자 니즈·연관 키워드가 필요해요. 이 정보는 자동으로 채워지지 않고, 여기서 직접 입력한 제품만 트렌드 매칭 대상에 들어가요.</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="stat-row">
+    <div class="stat-tile">
+      <span class="label">입력 완료</span>
+      <strong>{{ filled_count }} / {{ total_count }}</strong>
+      <span class="unit">개 제품에 속성이 채워져 있어요</span>
+    </div>
+  </div>
+</div>
+
+{% for p in profiles %}
+  <div class="chart-card" style="margin-bottom:12px">
+    <div class="chart-card-head" style="align-items:center">
+      <div>
+        <h3>{{ p.brand }} · {{ p.product }}</h3>
+        <div class="unit">
+          {% if p.is_filled %}
+            <span class="ins-badge pass">입력됨</span> {{ p.category or '카테고리 미지정' }}
+          {% else %}
+            <span class="ins-badge warn">미입력 — 트렌드 매칭에서 제외됨</span>
+          {% endif %}
+        </div>
+      </div>
+      <details>
+        <summary class="refresh-btn" style="cursor:pointer;list-style:none">✎ {{ '수정' if p.is_filled else '입력' }}</summary>
+        <form method="post" action="{{ url_for('products.save') }}" class="ins-form-grid" style="margin-top:12px;min-width:420px">
+          <input type="hidden" name="brand" value="{{ p.brand }}">
+          <input type="hidden" name="product" value="{{ p.product }}">
+          <label>카테고리
+            <select name="category">
+              <option value="">선택 안 함</option>
+              {% for c in categories %}<option {{ 'selected' if c == p.category else '' }}>{{ c }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>용도<input name="usage_desc" value="{{ p.usage_desc }}" placeholder="예: 텀블러 내부 세척"></label>
+          <label class="ins-wide">해결하는 문제<input name="problem_solved" value="{{ p.problem_solved }}" placeholder="예: 텀블러 잔여 세제 냄새 제거"></label>
+          <label class="ins-wide">소비자 니즈<input name="consumer_need" value="{{ p.consumer_need }}" placeholder="예: 세척이 번거로운 텀블러를 간편하게 관리하고 싶음"></label>
+          <label class="ins-wide">연관 키워드(쉼표로 구분)
+            <input name="keywords" value="{{ p.keywords|join(', ') }}" placeholder="예: 텀블러 세척, 텀블러 냄새, 텀블러 세정제">
+          </label>
+          <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">저장</button></div>
+        </form>
+      </details>
+    </div>
+  </div>
+{% else %}
+  <div class="soon-box"><b>자료실에 등록된 제품이 없어요.</b>먼저 자료실에서 브랜드/제품을 등록해 주세요.</div>
+{% endfor %}
+{% endblock %}

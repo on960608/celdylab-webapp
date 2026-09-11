@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}데이터 연동/설정 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">OPPORTUNITY · SETTINGS</div>
+  <h2>데이터 연동 / 가중치 설정</h2>
+  <p><a href="{{ url_for('dashboard.index') }}">← 대시보드로</a></p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>네이버 검색어트렌드 / 쇼핑인사이트</h3></div></div>
+  {% if naver_configured %}
+    <p class="note" style="color:var(--up);margin:0">✓ 연동되어 있어요.</p>
+  {% else %}
+    <p class="note" style="margin:0">⚠ 아직 연동되지 않았어요. 네이버 개발자센터(developers.naver.com)에서 애플리케이션을 등록해 <code>NAVER_CLIENT_ID</code> / <code>NAVER_CLIENT_SECRET</code>을 발급받은 뒤, Railway 프로젝트의 Variables에 등록하면 자동으로 켜져요. (무료, 상대 검색지수 0~100 제공 — 절대 검색량은 아니에요)</p>
+  {% endif %}
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>Google 트렌드(보조 지표)</h3><div class="unit">공식 API가 없어 비공식 방식으로 시도해요. 실패하면 자동으로 생략되고 대시보드에는 영향 없어요.</div></div></div>
+  <form method="post" action="{{ url_for('dashboard.collect_google') }}">
+    <button class="refresh-btn" type="submit">지금 모든 상품군 수집 시도</button>
+  </form>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>상품기회점수 가중치</h3><div class="unit">트렌드 40% + 시딩성과 25% + 공구매출성과 25% + 자사적합도 10%가 기본값이에요. 데이터가 쌓인 뒤 조정하세요. (합계가 100이 아니어도 비율로 자동 계산돼요)</div></div></div>
+  <form method="post" action="{{ url_for('dashboard.save_weights') }}" class="ins-form-grid">
+    <label>트렌드(%)<input type="number" step="1" min="0" name="trend_weight" value="{{ weights.trend_weight }}"></label>
+    <label>시딩 성과(%)<input type="number" step="1" min="0" name="seeding_weight" value="{{ weights.seeding_weight }}"></label>
+    <label>공구 매출 성과(%)<input type="number" step="1" min="0" name="gongu_weight" value="{{ weights.gongu_weight }}"></label>
+    <label>자사제품 적합도(%)<input type="number" step="1" min="0" name="fit_weight" value="{{ weights.fit_weight }}"></label>
+    <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">저장</button></div>
+  </form>
+  <p class="note">※ 지금은 ③ 추천 TOP5에 트렌드/적합도만 반영돼요. 시딩·공구 실적까지 결합한 "상품기회점수"는 데이터가 더 쌓인 다음 단계에서 이 가중치를 사용해 계산할 예정이에요.</p>
+</div>
+{% endblock %}

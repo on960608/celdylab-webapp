@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}카테고리 트렌드 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">OPPORTUNITY</div>
+  <h2>전월 대비 카테고리 트렌드</h2>
+  <p><a href="{{ url_for('dashboard.index') }}">← 대시보드로</a> · {{ prev_year_month }} → {{ current_year_month }} 카테고리별(리빙/청소/살림/욕실/주방/세탁/수납/생활용품) 평균 Trend Score 변화예요.</p>
+</div>
+
+<div class="chart-card">
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>카테고리</th><th>{{ prev_year_month }}</th><th>{{ current_year_month }}</th><th>변화</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.category }}</td><td>{{ r.prev_avg }}점</td><td>{{ r.cur_avg }}점</td>
+          <td style="color:{{ 'var(--up)' if r.delta >= 0 else 'var(--down)' }}">{{ '+' if r.delta >= 0 else '' }}{{ r.delta }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">지난달과 이번달 데이터가 모두 있는 카테고리가 아직 없어요.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

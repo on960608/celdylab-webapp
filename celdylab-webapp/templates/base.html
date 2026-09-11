@@ -15,26 +15,30 @@
       <div><b>셀디랩 콘텐츠팀</b><small>시딩·공구 웹앱 · v1</small></div>
     </div>
 
+    <div class="nav-label">매출 기회 발굴</div>
+    <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('dashboard.') else '' }}" href="{{ url_for('dashboard.index') }}">매출 기회 대시보드</a>
+      <a class="nav-link {{ 'active' if request.endpoint == 'products.index' else '' }}" href="{{ url_for('products.index') }}">자사 제품 정보</a>
+    </nav>
+
     <div class="nav-label">시딩</div>
     <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint == 'seeding' else '' }}" href="{{ url_for('seeding') }}">시딩 업무 가이드</a>
       <a class="nav-link {{ 'active' if request.endpoint == 'insight.index' else '' }}" href="{{ url_for('insight.index') }}">시딩 인사이트 분석</a>
       <a class="nav-link {{ 'active' if request.endpoint == 'listup.index' else '' }}" href="{{ url_for('listup.index') }}">협찬 인원 리스트업</a>
     </nav>
 
     <div class="nav-label">공구</div>
     <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint == 'gonggu' else '' }}" href="{{ url_for('gonggu') }}">공구 업무 가이드</a>
       <a class="nav-link {{ 'active' if request.endpoint == 'gongu.index' else '' }}" href="{{ url_for('gongu.index') }}">공구 성과 분석</a>
       <a class="nav-link {{ 'active' if request.endpoint == 'archive' else '' }}" href="{{ url_for('archive') }}">자료실</a>
-    </nav>
-
-    <div class="nav-label">제품 일정</div>
-    <nav class="nav-group">
-      <a class="nav-link {{ 'active' if request.endpoint == 'schedule.index' else '' }}" href="{{ url_for('schedule.index') }}">브랜드 제품 일정</a>
     </nav>
 
     <div class="nav-label">분석</div>
     <nav class="nav-group">
       <a class="nav-link {{ 'active' if request.endpoint == 'trend.index' else '' }}" href="{{ url_for('trend.index') }}">외부몰 트렌드 분석</a>
+      <a class="nav-link {{ 'active' if request.endpoint == 'trend.groups_index' else '' }}" href="{{ url_for('trend.groups_index') }}">상품군 관리</a>
     </nav>
 
     <div class="nav-label">댓글 이벤트 추첨</div>
