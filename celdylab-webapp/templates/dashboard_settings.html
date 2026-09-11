@@ -10,11 +10,8 @@
 <div class="chart-card" style="margin-bottom:16px">
   <div class="chart-card-head"><div><h3>네이버 검색어트렌드 / 쇼핑인사이트</h3></div></div>
   {% if naver_configured %}
-    <p class="note" style="color:var(--up);margin:0">✓ 연동되어 있어요.</p>
-    <form method="post" action="{{ url_for('dashboard.collect_naver') }}" style="margin-top:10px">
-      <button class="refresh-btn" type="submit">지금 모든 상품군 네이버 트렌드 수집</button>
-    </form>
-    <p class="note">최근 6개월치 월별 상대 검색지수(0~100)를 상품군마다 1번씩 호출해서 가져와요. (네이버 공식 API, 하루 5만 회까지 무료)<br>쇼핑인사이트는 <a href="{{ url_for('trend.groups_index') }}">상품군 관리</a>에서 "네이버 쇼핑 카테고리"를 지정해둔 상품군만 함께 수집돼요.</p>
+    <p class="note" style="color:var(--up);margin:0">✓ 연동되어 있어요. 하루 1번, <a href="{{ url_for('dashboard.index') }}">매출 기회 대시보드</a>나 <a href="{{ url_for('dashboard.trend_detail') }}">① 트렌드 그래프</a> 페이지를 열 때 자동으로 최신 데이터를 가져와요 — 따로 여기서 수집 버튼을 누를 필요는 없어요.</p>
+    <p class="note">최근 6개월치 월별 상대 검색지수(0~100)를 상품군마다 1번씩 호출해서 가져와요. (네이버 공식 API, 하루 5만 회까지 무료){% if last_naver_collected %}<br>마지막 자동 수집: {{ last_naver_collected }}{% endif %}<br>쇼핑인사이트는 <a href="{{ url_for('trend.groups_index') }}">상품군 관리</a>에서 "네이버 쇼핑 카테고리"를 지정해둔 상품군만 함께 수집돼요.<br>지금 바로 새로 가져오고 싶으면 <a href="{{ url_for('dashboard.trend_detail') }}">① 트렌드 그래프</a> 페이지의 "지금 바로 새로고침" 버튼을 눌러주세요.</p>
   {% else %}
     <p class="note" style="margin:0">⚠ 아직 연동되지 않았어요. 네이버 개발자센터(developers.naver.com)에서 애플리케이션을 등록해 <code>NAVER_CLIENT_ID</code> / <code>NAVER_CLIENT_SECRET</code>을 발급받은 뒤, Railway 프로젝트의 Variables에 등록하면 자동으로 켜져요. (무료, 상대 검색지수 0~100 제공 — 절대 검색량은 아니에요)</p>
   {% endif %}

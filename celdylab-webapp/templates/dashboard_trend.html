@@ -5,7 +5,16 @@
   <div class="eyebrow">OPPORTUNITY · {{ current_year_month }}</div>
   <h2>① 이번 달 트렌드 상품 전체 순위</h2>
   <p><a href="{{ url_for('dashboard.index') }}">← 대시보드로</a></p>
-  {% if not naver_configured %}<p class="note">⚠ 네이버 API 미연동 — 지금은 공구 시장 노출/구글 트렌드(연동 시)로만 계산돼요.</p>{% endif %}
+  {% if not naver_configured %}
+    <p class="note">⚠ 네이버 API 미연동 — 지금은 공구 시장 노출/구글 트렌드(연동 시)로만 계산돼요. <a href="{{ url_for('dashboard.settings') }}">연동 방법 보기 →</a></p>
+  {% else %}
+    <p class="note" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      {% if last_naver_collected %}네이버 데이터 마지막 자동 수집: {{ last_naver_collected }} (하루 1번 자동으로 새로고침돼요){% else %}네이버 데이터를 아직 한 번도 못 가져왔어요{% endif %}
+      <form method="post" action="{{ url_for('dashboard.collect_naver') }}" style="display:inline;margin:0">
+        <button class="refresh-btn" type="submit" style="padding:4px 10px;font-size:12px">지금 바로 새로고침</button>
+      </form>
+    </p>
+  {% endif %}
 </div>
 
 <div class="chart-card">
@@ -76,6 +85,13 @@
     });
   </script>
 {% else %}
-  <div class="soon-box"><b>아직 그래프로 보여줄 데이터가 없어요.</b> <a href="{{ url_for('dashboard.settings') }}">데이터 연동/설정</a>에서 네이버 트렌드 수집 버튼을 눌러 데이터를 먼저 모아주세요.</div>
+  <div class="soon-box">
+    <b>아직 그래프로 보여줄 데이터가 없어요.</b>
+    {% if not naver_configured %}
+      네이버 API가 연동되면 자동으로 모이기 시작해요. <a href="{{ url_for('dashboard.settings') }}">연동 방법 보기 →</a>
+    {% else %}
+      상품군을 만들면(<a href="{{ url_for('trend.groups_index') }}">상품군 관리</a>) 하루 1번 자동으로 데이터를 모아요. 지금 바로 보고 싶으면 위의 "지금 바로 새로고침" 버튼을 눌러주세요.
+    {% endif %}
+  </div>
 {% endif %}
 {% endblock %}

@@ -17,7 +17,9 @@
 <!-- ① 이번 달 트렌드 상품 TOP5 -->
 <a href="{{ url_for('dashboard.trend_detail') }}" style="text-decoration:none;color:inherit">
 <div class="chart-card" style="margin-bottom:16px">
-  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">①</div><h3>이번 달 트렌드 상품 TOP 5</h3><div class="unit">확보된 지표(검색 관심도·상승률·공구 노출 등)로만 계산돼요.</div></div></div>
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">①</div><h3>이번 달 트렌드 상품 TOP 5</h3><div class="unit">확보된 지표(검색 관심도·상승률·공구 노출 등)로만 계산돼요.
+    {% if naver_configured %}{% if last_naver_collected %}· 네이버 데이터 마지막 자동 수집: {{ last_naver_collected }}(하루 1번 자동 새로고침){% else %}· 네이버 데이터를 아직 한 번도 못 가져왔어요{% endif %}{% endif %}
+    · 그래프로 보려면 이 카드를 눌러보세요</div></div></div>
   <div class="top10-list">
     {% for t in trend_top5 %}
       <div class="top10-row">
