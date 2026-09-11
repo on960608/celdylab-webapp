@@ -595,15 +595,15 @@ def fetch_naver_trends_for_group(group_name, terms, months=6):
         "keywordGroups": [{"groupName": group_name, "keywords": keywords}],
     }
     headers = {
-        "X-Naver-Client-Id": client_id,
-        "X-Naver-Client-Secret": client_secret,
+        "X-NCP-APIGW-API-KEY-ID": client_id,
+        "X-NCP-APIGW-API-KEY": client_secret,
         "Content-Type": "application/json",
     }
 
     try:
         import requests
         resp = requests.post(
-            "https://openapi.naver.com/v1/datalab/search",
+            "https://naveropenapi.apigw.ntruss.com/datalab/v1/search",
             headers=headers, data=_json.dumps(payload), timeout=10,
         )
     except Exception as e:
@@ -690,15 +690,15 @@ def fetch_naver_shopping_keyword_trend(category_code, group_name, terms, months=
         "ages": [],
     }
     headers = {
-        "X-Naver-Client-Id": client_id,
-        "X-Naver-Client-Secret": client_secret,
+        "X-NCP-APIGW-API-KEY-ID": client_id,
+        "X-NCP-APIGW-API-KEY": client_secret,
         "Content-Type": "application/json",
     }
 
     try:
         import requests
         resp = requests.post(
-            "https://openapi.naver.com/v1/datalab/shopping/category/keywords",
+            "https://naverapihub.apigw.ntruss.com/shopping/v1/category/keywords",
             headers=headers, data=_json.dumps(payload), timeout=10,
         )
     except Exception as e:
@@ -748,15 +748,15 @@ def fetch_naver_shopping_category_trend(category_code, category_name="", months=
         "ages": [],
     }
     headers = {
-        "X-Naver-Client-Id": client_id,
-        "X-Naver-Client-Secret": client_secret,
+        "X-NCP-APIGW-API-KEY-ID": client_id,
+        "X-NCP-APIGW-API-KEY": client_secret,
         "Content-Type": "application/json",
     }
 
     try:
         import requests
         resp = requests.post(
-            "https://openapi.naver.com/v1/datalab/shopping/categories",
+            "https://naverapihub.apigw.ntruss.com/shopping/v1/categories",
             headers=headers, data=_json.dumps(payload), timeout=10,
         )
     except Exception as e:
