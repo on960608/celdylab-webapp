@@ -622,6 +622,17 @@ def set_trend_record_group(record_id, group_id):
 
 # ---------- 검색 트렌드 원본(trend_search_raw) ----------
 
+def get_last_naver_collection_at():
+    """네이버 검색어트렌드/쇼핑인사이트를 마지막으로 수집한 시각(ISO 문자열)을 돌려줘요. 한 번도 없으면 None.
+    "오늘 이미 한 번 자동으로 가져왔는지" 판단할 때 써요 — 화면 열 때마다 네이버에 요청을 보내지 않기 위해서예요."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT MAX(created_at) AS last_at FROM trend_search_raw WHERE source IN ('naver_search', 'naver_shopping')"
+    ).fetchone()
+    conn.close()
+    return row["last_at"] if row else None
+
+
 def add_trend_search_raw(source, group_id, collected_date, index_value, raw_json=""):
     conn = get_conn()
     conn.execute(
