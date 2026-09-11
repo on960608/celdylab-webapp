@@ -562,6 +562,69 @@ def fetch_google_trends_for_group(group_name, terms, timeframe="today 3-m", geo=
         return None, f"구글 트렌드 조회 실패(생략됨): {e}"
 
 
+def fetch_naver_trends_for_group(group_name, terms, months=6):
+    """
+    네이버 데이터랩 검색어트렌드 API(공식)로 상품군의 월별 상대 검색지수(0~100)를 가져와요.
+    한 번 호출로 최근 {months}개월치 월별 지수를 한꺼번에 받아와요(전월 대비 상승률 계산에 필요).
+    NAVER_CLIENT_ID/SECRET이 없거나 요청이 실패하면 예외를 삼키고 (빈 목록, 에러메시지)를 돌려줘요 —
+    이 함수가 실패해도 대시보드 전체가 죽지 않고 그냥 "네이버 지표 없음"으로 처리돼요.
+    반환: (points, error) — points: [{"year_month": "YYYY-MM", "value": float}, ...]
+    """
+    import os
+    import json as _json
+    from datetime import date as _date
+
+    client_id = os.environ.get("NAVER_CLIENT_ID")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        return [], "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET이 설정되어 있지 않아요."
+
+    keywords = (terms or [group_name])[:20]  # 네이버 데이터랩은 그룹당 최대 20개 키워드까지 허용
+
+    end = _date.today()
+    y, m = end.year, end.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    start = _date(y, m, 1)
+
+    payload = {
+        "startDate": start.isoformat(),
+        "endDate": end.isoformat(),
+        "timeUnit": "month",
+        "keywordGroups": [{"groupName": group_name, "keywords": keywords}],
+    }
+    headers = {
+        "X-Naver-Client-Id": client_id,
+        "X-Naver-Client-Secret": client_secret,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        import requests
+        resp = requests.post(
+            "https://openapi.naver.com/v1/datalab/search",
+            headers=headers, data=_json.dumps(payload), timeout=10,
+        )
+    except Exception as e:
+        return [], f"네이버 API 요청 중 오류: {e}"
+
+    if resp.status_code != 200:
+        return [], f"네이버 API 오류(status {resp.status_code}): {resp.text[:200]}"
+
+    try:
+        data = resp.json()
+        result = data["results"][0]
+        points = [
+            {"year_month": d["period"][:7], "value": float(d["ratio"])}
+            for d in result.get("data", [])
+        ]
+    except Exception as e:
+        return [], f"네이버 응답을 해석하지 못했어요: {e}"
+
+    return points, None
+
+
 def compute_opportunity_score(trend_score, seeding_score, gongu_score, fit_score, weights):
     """
     weights: {"trend_weight","seeding_weight","gongu_weight","fit_weight"} (합계가 꼭 100일 필요는 없음 — 비율로 계산)

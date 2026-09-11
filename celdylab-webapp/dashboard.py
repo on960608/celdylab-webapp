@@ -19,6 +19,7 @@ from analysis import (
     TREND_PLATFORMS, OPPORTUNITY_CATEGORIES,
     summarize_groupbuy_exposure, compute_group_trend_metrics, compute_trend_score,
     compute_opportunity_score, product_group_fit_score, fetch_google_trends_for_group,
+    fetch_naver_trends_for_group,
 )
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
@@ -326,4 +327,33 @@ def collect_google():
             failed += 1
             messages.append(f"{g['name']}: {err}")
     flash(f"구글 트렌드 수집 완료 — 성공 {ok}건 / 실패(생략) {failed}건" + (f" · {messages[0]}" if messages else ""))
+    return redirect(url_for("dashboard.settings"))
+
+
+@dashboard_bp.route("/settings/collect-naver", methods=["POST"])
+def collect_naver():
+    groups = db.list_trend_groups()
+    if not groups:
+        flash("먼저 상품군을 1개 이상 만들어 주세요.")
+        return redirect(url_for("dashboard.settings"))
+    if not _naver_configured():
+        flash("네이버 API 키(NAVER_CLIENT_ID/NAVER_CLIENT_SECRET)가 아직 설정되어 있지 않아요.")
+        return redirect(url_for("dashboard.settings"))
+
+    ok, failed, total_points, messages = 0, 0, 0, []
+    for g in groups:
+        terms = [t["term"] for t in g["terms"]] or [g["name"]]
+        points, err = fetch_naver_trends_for_group(g["name"], terms)
+        if points:
+            for p in points:
+                db.add_trend_search_raw("naver_search", g["id"], f"{p['year_month']}-01", p["value"])
+            total_points += len(points)
+            ok += 1
+        else:
+            failed += 1
+            messages.append(f"{g['name']}: {err}")
+    flash(
+        f"네이버 검색어트렌드 수집 완료 — 성공 {ok}개 상품군 / 실패 {failed}건 (총 {total_points}개월치 저장)"
+        + (f" · {messages[0]}" if messages else "")
+    )
     return redirect(url_for("dashboard.settings"))
