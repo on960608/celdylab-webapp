@@ -30,4 +30,52 @@
   </div>
   <p class="note">지표: search_interest(검색 관심도) · mom_growth(전월 대비 상승률) · recent_velocity(최근 상승 속도) · platform_overlap(플랫폼 동시 등장) · groupbuy_exposure(공구 노출). 확보되지 않은 지표는 점수 계산에서 빠지고 위 "없는 지표"에 표시돼요.</p>
 </div>
+
+<div class="block-head" style="margin-top:28px">
+  <h2 style="font-size:18px">상품군별 검색 트렌드 그래프</h2>
+  <p class="note" style="margin:0">월별로 쌓인 검색 지수(0~100, 상대값)를 상품군별 그래프로 보여줘요. 데이터가 있는 소스만 선으로 표시돼요.</p>
+</div>
+{% if chart_data %}
+  {% for r in rows if r.group.id in chart_data %}
+    <div class="chart-card" style="margin-bottom:16px">
+      <div class="chart-card-head"><div><h3>{{ r.group.name }}</h3></div></div>
+      <canvas id="chart-{{ r.group.id }}" height="90"></canvas>
+    </div>
+  {% endfor %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+  <script>
+    const CHART_DATA = {{ chart_data|tojson }};
+    const COLORS = ["#3b82f6", "#f59e0b", "#10b981"];
+    Object.keys(CHART_DATA).forEach(function (groupId) {
+      const series = CHART_DATA[groupId];
+      const months = Array.from(new Set(series.flatMap(function (s) { return s.points.map(function (p) { return p.year_month; }); }))).sort();
+      const datasets = series.map(function (s, i) {
+        const byMonth = {};
+        s.points.forEach(function (p) { byMonth[p.year_month] = p.value; });
+        return {
+          label: s.label,
+          data: months.map(function (m) { return (m in byMonth) ? byMonth[m] : null; }),
+          borderColor: COLORS[i % COLORS.length],
+          backgroundColor: COLORS[i % COLORS.length],
+          spanGaps: true,
+          tension: 0.25,
+        };
+      });
+      const ctx = document.getElementById("chart-" + groupId);
+      if (ctx) {
+        new Chart(ctx, {
+          type: "line",
+          data: { labels: months, datasets: datasets },
+          options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: "상대 검색지수(0~100)" } } },
+            plugins: { legend: { position: "bottom" } },
+          },
+        });
+      }
+    });
+  </script>
+{% else %}
+  <div class="soon-box"><b>아직 그래프로 보여줄 데이터가 없어요.</b> <a href="{{ url_for('dashboard.settings') }}">데이터 연동/설정</a>에서 네이버 트렌드 수집 버튼을 눌러 데이터를 먼저 모아주세요.</div>
+{% endif %}
 {% endblock %}

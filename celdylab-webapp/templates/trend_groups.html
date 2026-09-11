@@ -19,6 +19,12 @@
         {% for c in categories %}<option>{{ c }}</option>{% endfor %}
       </select>
     </label>
+    <label>네이버 쇼핑 카테고리(선택)
+      <select name="shopping_category">
+        <option value="">선택 안 함</option>
+        {% for name, code in shopping_categories %}<option value="{{ code }}">{{ name }}</option>{% endfor %}
+      </select>
+    </label>
     <label class="ins-wide">포함 검색어(쉼표로 구분)<input name="terms" placeholder="텀블러 세척, 텀블러 세정제, 텀블러 냄새 제거"></label>
     <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">만들기</button></div>
   </form>
@@ -29,7 +35,7 @@
     <div class="chart-card-head" style="align-items:center">
       <div>
         <h3>{{ g.name }}</h3>
-        <div class="unit">{{ g.category or '카테고리 미지정' }} · 검색어 {{ g.terms|length }}개</div>
+        <div class="unit">{{ g.category or '카테고리 미지정' }} · 검색어 {{ g.terms|length }}개 · 쇼핑인사이트: {{ g.shopping_category_label or '미지정' }}</div>
       </div>
       <form method="post" action="{{ url_for('trend.groups_delete', group_id=g.id) }}" onsubmit="return confirm('이 상품군을 삭제할까요? (연결된 기록의 태그도 해제돼요)')">
         <button class="ins-del-btn" type="submit">상품군 삭제</button>
@@ -47,6 +53,14 @@
     <form method="post" action="{{ url_for('trend.groups_add_term', group_id=g.id) }}" style="margin-top:10px;display:flex;gap:8px">
       <input name="term" placeholder="검색어 추가" style="flex:1">
       <button class="refresh-btn" type="submit">추가</button>
+    </form>
+    <form method="post" action="{{ url_for('trend.groups_set_shopping_category', group_id=g.id) }}" style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <label class="note" style="margin:0">쇼핑인사이트 카테고리</label>
+      <select name="shopping_category">
+        <option value="">선택 안 함</option>
+        {% for name, code in shopping_categories %}<option value="{{ code }}" {{ 'selected' if code == g.shopping_category else '' }}>{{ name }}</option>{% endfor %}
+      </select>
+      <button class="refresh-btn" type="submit">저장</button>
     </form>
   </div>
 {% else %}
