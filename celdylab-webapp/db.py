@@ -382,6 +382,48 @@ def clear_trend_records():
     conn.close()
 
 
+# ---------- 플랫폼별 인기셀러 TOP20 (외부몰 트렌드 분석 ①) ----------
+
+def list_platform_sellers(platform=None):
+    conn = get_conn()
+    if platform:
+        rows = conn.execute(
+            "SELECT * FROM trend_platform_sellers WHERE platform = ? ORDER BY id ASC", (platform,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM trend_platform_sellers ORDER BY id ASC").fetchall()
+    conn.close()
+    return rows
+
+
+def count_platform_sellers(platform):
+    conn = get_conn()
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM trend_platform_sellers WHERE platform = ?", (platform,)
+    ).fetchone()["n"]
+    conn.close()
+    return n
+
+
+def create_platform_seller(data, created_by):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO trend_platform_sellers
+           (platform, seller, brand, product, frequency_note, link, check_date, created_by, created_at)
+           VALUES (:platform, :seller, :brand, :product, :frequency_note, :link, :check_date, :created_by, :created_at)""",
+        {**data, "created_by": created_by, "created_at": now_iso()},
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_platform_seller(seller_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM trend_platform_sellers WHERE id = ?", (seller_id,))
+    conn.commit()
+    conn.close()
+
+
 # ---------- 댓글 이벤트 추첨 ----------
 
 def create_giveaway_event(data, winners, created_by):
