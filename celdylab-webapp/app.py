@@ -171,21 +171,5 @@ app.register_blueprint(products_bp)
 app.register_blueprint(dashboard_bp)
 
 
-# ---------------------------------------------------------------------------
-# 시딩 / 공구 업무 가이드 — STEP 텍스트·스크린샷 (예전 오프라인 트래커에서 이식)
-# ---------------------------------------------------------------------------
-
-@app.route("/seeding")
-@login_required
-def seeding():
-    return render_template("seeding.html")
-
-
-@app.route("/gonggu")
-@login_required
-def gonggu():
-    return render_template("gonggu_guide.html")
-
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
