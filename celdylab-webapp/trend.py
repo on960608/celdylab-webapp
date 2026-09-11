@@ -30,80 +30,150 @@ def _most_common(values):
     return max(counts, key=counts.get)
 
 
+PLATFORM_SELLER_CAP = 20
+
+
+def _dedupe_keep_order(values):
+    seen = []
+    for v in values:
+        v = (v or "").strip()
+        if v and v not in seen:
+            seen.append(v)
+    return seen
+
+
+def _common_seller_analysis(seller_rows):
+    """플랫폼별로 등록된 인기셀러를 이름 기준으로 묶어서, 여러 플랫폼에 공통으로
+    등록된 셀러를 우선 정렬해요. (여러 외부몰에서 동시에 공구를 진행 중인 셀러 찾기)"""
+    groups = {}
+    for r in seller_rows:
+        name = (r["seller"] or "").strip()
+        if not name:
+            continue
+        g = groups.setdefault(name, {"platforms": [], "brand_products": [], "notes": [], "links": []})
+        if r["platform"]:
+            g["platforms"].append(r["platform"])
+        brand_product = " ".join(x for x in [(r["brand"] or "").strip(), (r["product"] or "").strip()] if x)
+        if brand_product:
+            g["brand_products"].append(brand_product)
+        if r["frequency_note"]:
+            g["notes"].append(r["frequency_note"])
+        if r["link"]:
+            g["links"].append(r["link"])
+
+    result = []
+    for name, g in groups.items():
+        platforms = _dedupe_keep_order(g["platforms"])
+        result.append({
+            "seller": name,
+            "platforms": platforms,
+            "platform_count": len(platforms),
+            "brand_products": _dedupe_keep_order(g["brand_products"]),
+            "frequency_notes": _dedupe_keep_order(g["notes"]),
+            "link": g["links"][0] if g["links"] else "",
+        })
+
+    result.sort(key=lambda s: (-s["platform_count"], s["seller"]))
+    return result[:20]
+
+
+def _top_brand_products(seller_rows):
+    """6개 플랫폼 전체 데이터에서 브랜드/제품이 겹치는 걸 모아 등록 횟수 순으로 TOP10을 뽑아요.
+    카테고리 구분 없이, 브랜드·제품명이 모두 비어있는 행은 집계에서 빠져요(집계할 정보가 없어서)."""
+    groups = {}
+    for r in seller_rows:
+        brand = (r["brand"] or "").strip()
+        product = (r["product"] or "").strip()
+        if not brand and not product:
+            continue
+        key = (brand, product)
+        g = groups.setdefault(key, {"count": 0, "platforms": set()})
+        g["count"] += 1
+        if r["platform"]:
+            g["platforms"].add(r["platform"])
+
+    result = [
+        {
+            "brand": brand or "-",
+            "product": product or "-",
+            "count": g["count"],
+            "platform_count": len(g["platforms"]),
+        }
+        for (brand, product), g in groups.items()
+    ]
+    result.sort(key=lambda x: (-x["count"], -x["platform_count"]))
+    return result[:10]
+
+
 @trend_bp.route("/")
 def index():
     records = [dict(r) for r in db.list_trend_records()]
 
-    # 인기 셀러 분석 — 셀러별로 묶어서 등록 횟수 순 나열
-    seller_groups = {}
-    for r in records:
-        seller = (r["seller"] or "").strip()
-        if not seller:
-            continue
-        g = seller_groups.setdefault(seller, {"count": 0, "price_sum": 0, "price_count": 0, "platforms": set(), "categories": [], "link": "", "date": ""})
-        g["count"] += 1
-        if r["price"]:
-            g["price_sum"] += r["price"]
-            g["price_count"] += 1
-        if r["platform"]:
-            g["platforms"].add(r["platform"])
-        if r["category"]:
-            g["categories"].append(r["category"])
-        if r["link"] and (not g["link"] or (r["check_date"] or "") >= g["date"]):
-            g["link"] = r["link"]
-        if (r["check_date"] or "") >= g["date"]:
-            g["date"] = r["check_date"] or g["date"]
-
-    popular_sellers = sorted(
-        [
-            {
-                "seller": name,
-                "count": g["count"],
-                "platform_count": len(g["platforms"]),
-                "category": _most_common(g["categories"]) or "-",
-                "avg_price": (g["price_sum"] / g["price_count"]) if g["price_count"] else None,
-                "link": g["link"],
-            }
-            for name, g in seller_groups.items()
-        ],
-        key=lambda s: (-s["count"], -s["platform_count"]),
-    )
-
-    # 카테고리별 소구 인사이트 — 등록 건수·평균 공구가·확인된 플랫폼 수
-    category_groups = {}
-    for r in records:
-        cat = r["category"] or "기타"
-        g = category_groups.setdefault(cat, {"count": 0, "price_sum": 0, "price_count": 0, "platforms": set()})
-        g["count"] += 1
-        if r["price"]:
-            g["price_sum"] += r["price"]
-            g["price_count"] += 1
-        if r["platform"]:
-            g["platforms"].add(r["platform"])
-    category_insights = sorted(
-        [
-            {
-                "category": cat,
-                "count": g["count"],
-                "avg_price": (g["price_sum"] / g["price_count"]) if g["price_count"] else None,
-                "platform_count": len(g["platforms"]),
-            }
-            for cat, g in category_groups.items()
-        ],
-        key=lambda c: -c["count"],
-    )
-
     # 상품군별 공구 시장 노출 요약 — 여러 플랫폼 동시 등장 / 신규 등장 / 반복 등장
+    # (매출 기회 대시보드의 점수 계산에도 쓰이는 기능이라 그대로 유지해요)
     groups = db.list_trend_groups()
     group_summaries = summarize_groupbuy_exposure(records, groups, TREND_PLATFORMS)
+
+    # ① 플랫폼별 인기셀러 (최대 TOP 20씩)
+    platform_sellers = {}
+    for p in TREND_PLATFORMS:
+        rows = [dict(r) for r in db.list_platform_sellers(p)]
+        platform_sellers[p] = {"rows": rows, "count": len(rows), "full": len(rows) >= PLATFORM_SELLER_CAP}
+
+    all_seller_rows = [dict(r) for r in db.list_platform_sellers()]
+
+    # ② 왼쪽 — 공통 인기셀러 분석 (총 20명, 10명씩 2페이지)
+    common_sellers = _common_seller_analysis(all_seller_rows)
+    common_sellers_page1 = common_sellers[:10]
+    common_sellers_page2 = common_sellers[10:20]
+
+    # ② 오른쪽 — 공구 인기 브랜드·제품 TOP10 (6개 플랫폼 통합, 카테고리 구분 없음)
+    top_brand_products = _top_brand_products(all_seller_rows)
 
     return render_template(
         "trend.html",
         platforms=TREND_PLATFORMS, categories=TREND_CATEGORIES, platform_links=TREND_PLATFORM_LINKS,
-        records=records, popular_sellers=popular_sellers, category_insights=category_insights,
         api_key_configured=bool(os.environ.get("AUTOMATION_API_KEY")),
-        groups=groups, group_summaries=group_summaries,
+        records=records, groups=groups, group_summaries=group_summaries,
+        platform_sellers=platform_sellers, platform_seller_cap=PLATFORM_SELLER_CAP,
+        common_sellers_page1=common_sellers_page1, common_sellers_page2=common_sellers_page2,
+        top_brand_products=top_brand_products,
     )
+
+
+@trend_bp.route("/platform-sellers/add", methods=["POST"])
+def platform_sellers_add():
+    f = request.form
+    platform = f.get("platform", "").strip()
+    seller = f.get("seller", "").strip()
+    if not platform or platform not in TREND_PLATFORMS:
+        flash("플랫폼을 확인해 주세요.")
+        return redirect(url_for("trend.index"))
+    if not seller:
+        flash("셀러명을 입력해 주세요.")
+        return redirect(url_for("trend.index"))
+    if db.count_platform_sellers(platform) >= PLATFORM_SELLER_CAP:
+        flash(f"{platform}은(는) 이미 TOP {PLATFORM_SELLER_CAP}명이 모두 등록되어 있어요. 먼저 삭제한 뒤 추가해 주세요.")
+        return redirect(url_for("trend.index"))
+    data = {
+        "platform": platform,
+        "seller": seller,
+        "brand": f.get("brand", "").strip(),
+        "product": f.get("product", "").strip(),
+        "frequency_note": f.get("frequency_note", "").strip(),
+        "link": f.get("link", "").strip(),
+        "check_date": f.get("check_date", "").strip(),
+    }
+    db.create_platform_seller(data, session.get("user_name"))
+    flash(f"{platform}에 '{seller}'님을 등록했어요.")
+    return redirect(url_for("trend.index"))
+
+
+@trend_bp.route("/platform-sellers/<int:seller_id>/delete", methods=["POST"])
+def platform_sellers_delete(seller_id):
+    db.delete_platform_seller(seller_id)
+    flash("삭제했어요.")
+    return redirect(url_for("trend.index"))
 
 
 @trend_bp.route("/<int:record_id>/tag", methods=["POST"])
