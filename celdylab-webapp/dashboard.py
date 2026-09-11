@@ -194,8 +194,80 @@ def _compute_progress():
     return rows
 
 
+def _run_naver_collection(groups):
+    """네이버 검색어트렌드 + 쇼핑인사이트를 실제로 가져와서 저장해요.
+    수동 '수집' 버튼과 자동(하루 1번) 수집이 똑같은 이 함수를 같이 써요."""
+    ok, failed, total_points, messages = 0, 0, 0, []
+    for g in groups:
+        terms = [t["term"] for t in g["terms"]] or [g["name"]]
+        points, err = fetch_naver_trends_for_group(g["name"], terms)
+        if points:
+            for p in points:
+                db.add_trend_search_raw("naver_search", g["id"], f"{p['year_month']}-01", p["value"])
+            total_points += len(points)
+            ok += 1
+        else:
+            failed += 1
+            messages.append(f"{g['name']}: {err}")
+
+    # 쇼핑인사이트는 "쇼핑 카테고리"를 지정해둔 상품군만 수집돼요 (설정 안 했으면 조용히 건너뜀).
+    shop_ok, shop_failed, shop_points = 0, 0, 0
+    for g in groups:
+        if not g.get("shopping_category"):
+            continue
+        terms = [t["term"] for t in g["terms"]] or [g["name"]]
+        points, err = fetch_naver_shopping_keyword_trend(g["shopping_category"], g["name"], terms)
+        if points:
+            for p in points:
+                db.add_trend_search_raw("naver_shopping", g["id"], f"{p['year_month']}-01", p["value"])
+            shop_points += len(points)
+            shop_ok += 1
+        else:
+            shop_failed += 1
+            messages.append(f"[쇼핑인사이트] {g['name']}: {err}")
+
+    return {
+        "ok": ok, "failed": failed, "total_points": total_points,
+        "shop_ok": shop_ok, "shop_failed": shop_failed, "shop_points": shop_points,
+        "messages": messages,
+    }
+
+
+def _naver_collection_message(stats):
+    shop_msg = (
+        f" · 쇼핑인사이트 성공 {stats['shop_ok']}개/실패 {stats['shop_failed']}건({stats['shop_points']}개월치)"
+        if (stats["shop_ok"] or stats["shop_failed"]) else ""
+    )
+    return (
+        f"네이버 검색어트렌드 수집 완료 — 성공 {stats['ok']}개 상품군 / 실패 {stats['failed']}건 (총 {stats['total_points']}개월치 저장)"
+        + shop_msg
+        + (f" · {stats['messages'][0]}" if stats["messages"] else "")
+    )
+
+
+def _auto_collect_naver_if_stale():
+    """오늘 하루 1번만, 화면을 열 때 조용히 네이버 데이터를 새로 가져와요.
+    설정 페이지에 따로 들어가서 '수집' 버튼을 누를 필요가 없게 하기 위해서예요.
+    네이버 키가 없거나 상품군이 없으면 아무 것도 안 하고, 실패해도 대시보드 자체는 항상 정상적으로 떠요."""
+    if not _naver_configured():
+        return
+    groups = db.list_trend_groups()
+    if not groups:
+        return
+    last_at = db.get_last_naver_collection_at()
+    today = date.today().isoformat()
+    if last_at and last_at[:10] == today:
+        return  # 오늘 이미 가져왔어요 — 네이버에 또 요청을 보내지 않아요.
+    try:
+        _run_naver_collection(groups)
+    except Exception:
+        pass  # 자동 수집은 실패해도 조용히 넘어가요. 수동 수집 버튼으로 다시 시도할 수 있어요.
+
+
 @dashboard_bp.route("/")
 def index():
+    _auto_collect_naver_if_stale()
+    last_naver_collected = db.get_last_naver_collection_at()
     all_scores = _compute_all_group_scores()
     ym, scored = _snapshot_current_month(all_scores)
     prev_ym = _prev_year_month(ym)
@@ -229,11 +301,14 @@ def index():
         category_rising=category_rising, recommend_top5=recommend_top5, progress=progress[:6],
         current_year_month=ym, has_any_group=bool(groups),
         naver_configured=_naver_configured(),
+        last_naver_collected=(last_naver_collected[:10] if last_naver_collected else None),
     )
 
 
 @dashboard_bp.route("/trend")
 def trend_detail():
+    _auto_collect_naver_if_stale()
+    last_naver_collected = db.get_last_naver_collection_at()
     all_scores = _compute_all_group_scores()
     ym, scored = _snapshot_current_month(all_scores)
     prev_ym = _prev_year_month(ym)
@@ -253,6 +328,7 @@ def trend_detail():
     return render_template(
         "dashboard_trend.html", rows=rows, current_year_month=ym,
         naver_configured=_naver_configured(), chart_data=chart_data,
+        last_naver_collected=(last_naver_collected[:10] if last_naver_collected else None),
     )
 
 
@@ -320,10 +396,12 @@ def update_candidate_status(candidate_id):
 
 @dashboard_bp.route("/settings")
 def settings():
+    last_naver_collected = db.get_last_naver_collection_at()
     return render_template(
         "dashboard_settings.html",
         weights=db.get_opportunity_weights(), groups=db.list_trend_groups(),
         naver_configured=_naver_configured(),
+        last_naver_collected=(last_naver_collected[:10] if last_naver_collected else None),
     )
 
 
@@ -362,47 +440,15 @@ def collect_google():
 
 @dashboard_bp.route("/settings/collect-naver", methods=["POST"])
 def collect_naver():
+    back_to = request.referrer or url_for("dashboard.settings")
     groups = db.list_trend_groups()
     if not groups:
         flash("먼저 상품군을 1개 이상 만들어 주세요.")
-        return redirect(url_for("dashboard.settings"))
+        return redirect(back_to)
     if not _naver_configured():
         flash("네이버 API 키(NAVER_CLIENT_ID/NAVER_CLIENT_SECRET)가 아직 설정되어 있지 않아요.")
-        return redirect(url_for("dashboard.settings"))
+        return redirect(back_to)
 
-    ok, failed, total_points, messages = 0, 0, 0, []
-    for g in groups:
-        terms = [t["term"] for t in g["terms"]] or [g["name"]]
-        points, err = fetch_naver_trends_for_group(g["name"], terms)
-        if points:
-            for p in points:
-                db.add_trend_search_raw("naver_search", g["id"], f"{p['year_month']}-01", p["value"])
-            total_points += len(points)
-            ok += 1
-        else:
-            failed += 1
-            messages.append(f"{g['name']}: {err}")
-
-    # 쇼핑인사이트는 "쇼핑 카테고리"를 지정해둔 상품군만 수집돼요 (설정 안 했으면 조용히 건너뜀).
-    shop_ok, shop_failed, shop_points = 0, 0, 0
-    for g in groups:
-        if not g.get("shopping_category"):
-            continue
-        terms = [t["term"] for t in g["terms"]] or [g["name"]]
-        points, err = fetch_naver_shopping_keyword_trend(g["shopping_category"], g["name"], terms)
-        if points:
-            for p in points:
-                db.add_trend_search_raw("naver_shopping", g["id"], f"{p['year_month']}-01", p["value"])
-            shop_points += len(points)
-            shop_ok += 1
-        else:
-            shop_failed += 1
-            messages.append(f"[쇼핑인사이트] {g['name']}: {err}")
-
-    shop_msg = f" · 쇼핑인사이트 성공 {shop_ok}개/실패 {shop_failed}건({shop_points}개월치)" if (shop_ok or shop_failed) else ""
-    flash(
-        f"네이버 검색어트렌드 수집 완료 — 성공 {ok}개 상품군 / 실패 {failed}건 (총 {total_points}개월치 저장)"
-        + shop_msg
-        + (f" · {messages[0]}" if messages else "")
-    )
-    return redirect(url_for("dashboard.settings"))
+    stats = _run_naver_collection(groups)
+    flash(_naver_collection_message(stats))
+    return redirect(back_to)
