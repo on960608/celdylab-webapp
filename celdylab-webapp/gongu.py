@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 
 import db
-from analysis import gongu_net_sold, gongu_return_pct, gongu_tier, TIER_ORDER, won, pct, BRANDS
+from analysis import gongu_net_sold, gongu_return_pct, gongu_tier, TIER_ORDER, won, pct, manwon, BRANDS
 
 gongu_bp = Blueprint("gongu", __name__, url_prefix="/gongu-perf")
 
@@ -50,7 +50,7 @@ def index():
         name = (r["seller"] or "").strip()
         if not name:
             continue
-        g = seller_groups.setdefault(name, {"followers": 0, "revenue": 0, "sold_qty": 0, "return_qty": 0, "products": [], "count": 0})
+        g = seller_groups.setdefault(name, {"followers": 0, "revenue": 0, "sold_qty": 0, "return_qty": 0, "products": [], "count": 0, "records": []})
         g["followers"] = max(g["followers"], r["followers"])
         g["revenue"] += r["revenue"]
         g["sold_qty"] += r["sold_qty"]
@@ -58,6 +58,7 @@ def index():
         if r["product"]:
             g["products"].append(r["product"])
         g["count"] += 1
+        g["records"].append(r)
     sellers = sorted(
         [
             {
@@ -68,6 +69,9 @@ def index():
                 "total_sold": max(0, g["sold_qty"] - g["return_qty"]),
                 "avg_return": (g["return_qty"] / g["sold_qty"] * 100) if g["sold_qty"] else 0,
                 "count": g["count"],
+                # 회차가 1건뿐인 셀러는 그 원본 데이터를 그대로 수정할 수 있어요.
+                # (여러 회차가 합산된 값은 어느 회차를 고칠지 애매해서, 그 경우엔 수정 버튼을 숨겨요.)
+                "record": g["records"][0] if g["count"] == 1 else None,
             }
             for name, g in seller_groups.items()
         ],
@@ -144,7 +148,7 @@ def index():
         records=records, count=n, avg_revenue=avg_revenue, follower_benchmarks=follower_benchmarks, avg_return=avg_return,
         sellers=sellers, tiers=tiers, products=products, forecast=forecast,
         fc_followers=fc_followers, fc_price=fc_price,
-        won=won, pct=pct, net_sold=gongu_net_sold, return_pct=gongu_return_pct,
+        won=won, pct=pct, net_sold=gongu_net_sold, return_pct=gongu_return_pct, manwon=manwon,
     )
 
 
@@ -165,6 +169,26 @@ def add():
     }
     db.create_gongu_record(data, session.get("user_name"))
     flash("공구 데이터를 등록했어요.")
+    return redirect(url_for("gongu.index", brand=f.get("brand") or None))
+
+
+@gongu_bp.route("/<int:record_id>/edit", methods=["POST"])
+def edit(record_id):
+    f = request.form
+    data = {
+        "month": f.get("month", "").strip(),
+        "channel": f.get("channel", "").strip(),
+        "brand": f.get("brand", "").strip(),
+        "product": f.get("product", "").strip(),
+        "seller": f.get("seller", "").strip(),
+        "followers": int(f.get("followers") or 0),
+        "link": f.get("link", "").strip(),
+        "revenue": int(f.get("revenue") or 0),
+        "sold_qty": int(f.get("sold_qty") or 0),
+        "return_qty": int(f.get("return_qty") or 0),
+    }
+    db.update_gongu_record(record_id, data)
+    flash("공구 데이터를 수정했어요.")
     return redirect(url_for("gongu.index", brand=f.get("brand") or None))
 
 
