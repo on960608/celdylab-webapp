@@ -129,7 +129,12 @@
     <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">RECOMMENDATION</div><h3>신규 공구 예상 계산기</h3><div class="unit">입력한 팔로워 수와 같은 구간의 기존 셀러 성과를 우선 비교해요.</div></div></div>
     <form method="get" class="ins-form-grid" style="grid-template-columns:1fr 1fr;margin-top:10px">
       <input type="hidden" name="brand" value="{{ brand or '' }}"><input type="hidden" name="month" value="{{ month or '' }}">
-      <label>예상 셀러 팔로워 수<input name="fc_followers" type="number" min="0" value="{{ fc_followers or '' }}"></label>
+      <label>예상 셀러 팔로워 수
+        <select name="fc_followers">
+          <option value="">선택해주세요</option>
+          {% for opt in fc_follower_options %}<option value="{{ opt.value }}" {{ 'selected' if fc_followers==opt.value }}>{{ opt.label }}</option>{% endfor %}
+        </select>
+      </label>
       <label>예상 판매 단가<input name="fc_price" type="number" min="0" value="{{ fc_price or '' }}"></label>
       <div class="ins-wide"><button class="refresh-btn" type="submit">예상치 계산</button></div>
     </form>
@@ -141,9 +146,9 @@
         <div class="gp-forecast-grid">
           <div class="gp-forecast-tile"><span>예상 매출</span><strong>{{ forecast.revenue }}</strong></div>
           <div class="gp-forecast-tile"><span>예상 판매 수량</span><strong>{{ forecast.qty }}</strong></div>
-          <div class="gp-forecast-tile"><span>보수적 재고</span><strong>{{ forecast.low }}</strong></div>
-          <div class="gp-forecast-tile"><span>권장 재고</span><strong>{{ forecast.mid }}</strong></div>
-          <div class="gp-forecast-tile"><span>공격적 재고</span><strong>{{ forecast.high }}</strong></div>
+          <div class="gp-forecast-tile" style="position:relative;padding-bottom:20px"><span>보수적 재고</span><strong>{{ forecast.low }}</strong><span style="position:absolute;right:10px;bottom:6px;font-size:11px;color:var(--muted2)">{{ forecast.low_pct }}</span></div>
+          <div class="gp-forecast-tile" style="position:relative;padding-bottom:20px"><span>권장 재고</span><strong>{{ forecast.mid }}</strong><span style="position:absolute;right:10px;bottom:6px;font-size:11px;color:var(--muted2)">{{ forecast.mid_pct }}</span></div>
+          <div class="gp-forecast-tile" style="position:relative;padding-bottom:20px"><span>공격적 재고</span><strong>{{ forecast.high }}</strong><span style="position:absolute;right:10px;bottom:6px;font-size:11px;color:var(--muted2)">{{ forecast.high_pct }}</span></div>
         </div>
       {% endif %}
     {% endif %}
