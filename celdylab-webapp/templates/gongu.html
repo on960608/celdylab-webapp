@@ -47,18 +47,18 @@
     <div>
       <div class="chart-svg-wrap">
         <table class="data-table">
-          <thead><tr><th>월</th><th>제품</th><th>채널</th><th>셀러</th><th>팔로워</th><th>매출</th><th>판매량</th><th>1천명당 매출</th><th>반품율</th><th>링크</th><th></th></tr></thead>
+          <thead><tr><th>월</th><th>제품</th><th>채널</th><th>셀러</th><th>팔로워</th><th>매출</th><th>판매량</th><th>반품율</th><th>링크</th><th></th></tr></thead>
           <tbody>
             {% for r in records %}
             <tr>
               <td>{{ r.month or '-' }}</td><td>{{ r.product or '-' }}</td><td>{{ r.channel or '-' }}</td><td>{{ r.seller or '-' }}</td>
               <td>{{ '{:,}'.format(r.followers) }}</td><td>{{ won(r.revenue) }}</td><td>{{ '{:,}'.format(net_sold(r)) }}</td>
-              <td>{{ won(per1k_of(r)) }}</td><td>{{ pct(return_pct(r)) }}</td>
+              <td>{{ pct(return_pct(r)) }}</td>
               <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
               <td><form method="post" action="{{ url_for('gongu.delete', record_id=r.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
             </tr>
             {% else %}
-            <tr><td colspan="11" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 데이터가 없습니다.</td></tr>
+            <tr><td colspan="10" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 데이터가 없습니다.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -120,7 +120,11 @@
   <div class="chart-card">
     <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">FOLLOWER TIERS</div><h3>팔로워 구간별 평균</h3></div></div>
     {% for t in tiers %}
-      <div class="gp-block"><b>{{ t.tier }}</b><p>평균 매출 {{ won(t.avg_revenue) }} · 평균 판매 {{ '{:,}'.format(t.avg_sold|round|int) }}개</p></div>
+      {% if t.count %}
+      <div class="gp-block"><b>{{ t.tier }}</b><p>평균 매출 {{ won(t.avg_revenue) }} · 평균 판매 {{ '{:,}'.format(t.avg_sold|round|int) }}개 · {{ t.count }}건</p></div>
+      {% else %}
+      <div class="gp-block"><b>{{ t.tier }}</b><p class="note">아직 데이터 없음</p></div>
+      {% endif %}
     {% else %}
       <p class="note">데이터를 추가하면 구간별 평균이 표시됩니다.</p>
     {% endfor %}
