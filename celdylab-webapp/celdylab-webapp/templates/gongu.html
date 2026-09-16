@@ -71,8 +71,10 @@
 <div class="stat-row" style="margin-bottom:16px">
   <div class="stat-tile"><span class="label">총 진행 셀러</span><strong>{{ count }}명</strong></div>
   <div class="stat-tile"><span class="label">평균 매출</span><strong>{{ won(avg_revenue) }}</strong></div>
-  <div class="stat-tile"><span class="label">팔로워 1,000명당 매출</span><strong>{{ won(per1k) }}</strong></div>
   <div class="stat-tile"><span class="label">평균 반품율</span><strong>{{ pct(avg_return) }}</strong></div>
+  {% for fb in follower_benchmarks %}
+  <div class="stat-tile"><span class="label">{{ fb.label }} 예상 매출</span><strong>{{ won(fb.revenue) }}</strong></div>
+  {% endfor %}
 </div>
 
 <div class="chart-card" style="margin-bottom:16px">
