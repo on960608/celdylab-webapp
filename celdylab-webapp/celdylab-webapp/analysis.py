@@ -8,6 +8,16 @@ BRANDS = ["코드니처", "빠이러스", "라이프스타일마트"]
 TREND_PLATFORMS = ["캘린", "82market", "위시버니", "지금하는공구", "인공", "공구모아"]
 TREND_CATEGORIES = ["리빙", "여행", "홈인테리어", "패션잡화", "주방용품", "생활용품", "기타"]
 
+# 인플루언서 공동구매(공구)가 활발히 진행되는 모니터링 대상 플랫폼
+TREND_PLATFORM_LINKS = [
+    {"name": "캘린 (Calen)", "url": "https://www.calen.co.kr/", "desc": "인플루언서 공동구매"},
+    {"name": "82market", "url": "https://www.82market.com/", "desc": "인플루언서 공구 마켓"},
+    {"name": "위시버니 (드랍)", "url": "https://www.wishbunny.me/drop", "desc": "공구 일정·알림"},
+    {"name": "지금하는공구", "url": "https://www.09now.com/", "desc": "인스타 공구 검색엔진"},
+    {"name": "인공 (IN gong)", "url": "https://insta-gong.com/category/kitchen-clean", "desc": "주방/청소 특화 인스타 공구 모음"},
+    {"name": "공구모아", "url": "https://gonggumoa.com/", "desc": "공구 일정·인기 공구 통합 모음"},
+]
+
 
 # ---------------------------------------------------------------------------
 # 시딩 인사이트
@@ -98,20 +108,18 @@ def gongu_per1k(r):
 
 def gongu_tier(followers):
     n = followers or 0
-    if n < 10000:
-        return "1만 미만"
-    if n < 30000:
-        return "1만~3만"
-    if n < 50000:
-        return "3만~5만"
     if n < 100000:
-        return "5만~10만"
+        return "10만 미만"
     if n < 300000:
         return "10만~30만"
-    return "30만 이상"
+    if n < 500000:
+        return "30만~50만"
+    if n < 700000:
+        return "50만~70만"
+    return "70만 이상"
 
 
-TIER_ORDER = ["1만 미만", "1만~3만", "3만~5만", "5만~10만", "10만~30만", "30만 이상"]
+TIER_ORDER = ["10만 미만", "10만~30만", "30만~50만", "50만~70만", "70만 이상"]
 
 
 # ---------------------------------------------------------------------------
@@ -354,3 +362,439 @@ def fetch_ig_comments_via_graph_api(post_url):
         url, params = next_url, None
 
     return comments, None
+
+
+# ---------------------------------------------------------------------------
+# 매출 기회 발굴 대시보드 — 상품군 매칭 / Trend Score / 상품기회점수
+#
+# 원칙: 확보하지 못한 데이터를 0이나 평균값으로 대신 채우지 않아요. 지표가 없으면
+# 계산에서 그냥 빼고, "몇 개 지표 중 몇 개로 계산됐는지"를 항상 함께 보여줘요.
+# ---------------------------------------------------------------------------
+
+OPPORTUNITY_CATEGORIES = ["리빙", "청소", "살림", "욕실", "주방", "세탁", "수납", "생활용품"]
+
+TREND_SCORE_WEIGHTS = {
+    "search_interest": 35,     # 검색 관심도 (네이버/구글 상대지수)
+    "mom_growth": 25,          # 전월 대비 상승률
+    "recent_velocity": 15,     # 최근 상승 속도
+    "platform_overlap": 15,    # 여러 공구 플랫폼 동시 등장 정도
+    "groupbuy_exposure": 10,   # 공구 시장 노출 빈도
+}
+
+
+def _tokenize(text):
+    """아주 단순한 키워드 비교용 토크나이저 — 공백/쉼표/슬래시로 나누고 소문자화해요.
+    임베딩·형태소 분석 없이도 '겹치는 단어가 있는지'를 투명하게 설명할 수 있게 하는 게 목적이에요."""
+    text = (text or "").lower()
+    parts = re.split(r"[,\s/·]+", text)
+    return {p for p in parts if p}
+
+
+def product_group_fit_score(group_terms, product_keywords, product_text_fields):
+    """
+    상품군 키워드 집합과 자사 제품의 (키워드 + 카테고리/용도/문제/니즈 텍스트)를 비교해
+    0~100 적합도와 겹치는 단어 목록을 반환해요.
+    단순 제품명 일치가 아니라 카테고리/용도/문제/니즈 텍스트까지 포함해서 비교하지만,
+    AI 임베딩 기반이 아니라 '단어 겹침' 기준이라 왜 이 점수가 나왔는지 항상 설명 가능해요.
+    """
+    group_tokens = set()
+    for t in group_terms:
+        group_tokens |= _tokenize(t)
+
+    product_tokens = set()
+    for k in product_keywords:
+        product_tokens |= _tokenize(k)
+    for f in product_text_fields:
+        product_tokens |= _tokenize(f)
+
+    if not group_tokens or not product_tokens:
+        return 0.0, []
+
+    matched = group_tokens & product_tokens
+    if not matched:
+        return 0.0, []
+    score = len(matched) / len(group_tokens | product_tokens) * 100
+    return round(score, 1), sorted(matched)
+
+
+def compute_trend_score(metrics):
+    """
+    metrics: {"search_interest", "mom_growth", "recent_velocity", "platform_overlap", "groupbuy_exposure"}
+    각 값은 0~100으로 이미 정규화되어 있다고 가정하고, 없는 지표(None)는 계산에서 제외해요.
+    반환: {"score": float|None, "used": [...], "missing": [...]}
+    """
+    used, missing, weighted_sum, weight_sum = [], [], 0.0, 0.0
+    for key, w in TREND_SCORE_WEIGHTS.items():
+        v = metrics.get(key)
+        if v is None:
+            missing.append(key)
+            continue
+        used.append(key)
+        weighted_sum += max(0.0, min(100.0, v)) * w
+        weight_sum += w
+    if weight_sum == 0:
+        return {"score": None, "used": used, "missing": missing}
+    return {"score": round(weighted_sum / weight_sum, 1), "used": used, "missing": missing}
+
+
+def groupbuy_exposure_metrics(records_for_group, all_platforms, days=30):
+    """
+    records_for_group: 이 상품군으로 태깅된 trend_records(dict, check_date/platform 포함) 목록.
+    반환: platform_overlap(0~100, 몇 개 플랫폼에서 동시 등장했는지 비율),
+          groupbuy_exposure(0~100, 최근 노출 빈도 기준), recent_count, platforms(set),
+          is_new(최근 처음 등장), is_recurring(서로 다른 달에 반복 등장)
+    """
+    from datetime import date, timedelta
+
+    if not records_for_group:
+        return {
+            "platform_overlap": None, "groupbuy_exposure": None,
+            "recent_count": 0, "platforms": set(), "is_new": False, "is_recurring": False,
+        }
+
+    platforms = {r["platform"] for r in records_for_group if r["platform"]}
+    platform_overlap = (len(platforms) / len(all_platforms) * 100) if all_platforms else None
+
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    recent = [r for r in records_for_group if (r["check_date"] or "") >= cutoff]
+    # 노출 빈도를 0~100으로 캡(10회 이상 등록 시 만점) — 데이터가 더 쌓이면 기준을 조정할 수 있어요.
+    groupbuy_exposure = min(len(recent) / 10 * 100, 100)
+
+    dates_sorted = sorted(r["check_date"] for r in records_for_group if r["check_date"])
+    is_new = bool(dates_sorted) and dates_sorted[0] >= cutoff
+    is_recurring = len({d[:7] for d in dates_sorted if len(d) >= 7}) >= 2
+
+    return {
+        "platform_overlap": platform_overlap,
+        "groupbuy_exposure": groupbuy_exposure,
+        "recent_count": len(recent),
+        "platforms": platforms,
+        "is_new": is_new,
+        "is_recurring": is_recurring,
+    }
+
+
+def summarize_groupbuy_exposure(records, groups, all_platforms):
+    """
+    records: trend_records(dict) 전체, groups: trend_keyword_groups 목록.
+    상품군이 태깅된 기록만 모아 노출 지표를 계산하고, 플랫폼 동시 등장 수 -> 최근 등록 수 순으로 정렬해요.
+    """
+    summaries = []
+    for g in groups:
+        g_records = [r for r in records if r.get("product_group_id") == g["id"]]
+        if not g_records:
+            continue
+        metrics = groupbuy_exposure_metrics(g_records, all_platforms)
+        summaries.append({"group": g, "records": g_records, **metrics})
+    summaries.sort(key=lambda s: (-len(s["platforms"]), -s["recent_count"]))
+    return summaries
+
+
+def compute_group_trend_metrics(records_for_group, all_platforms, monthly_search_points):
+    """
+    한 상품군의 Trend Score 계산에 필요한 지표를 모아요.
+    monthly_search_points: [{"year_month": "YYYY-MM", "value": float}, ...] — 소스 구분 없이
+    이미 대표값으로 합쳐서 넘겨받아요(예: 네이버 있으면 네이버, 없으면 구글).
+    반환: (metrics_dict, exposure_detail)
+    """
+    exposure = groupbuy_exposure_metrics(records_for_group, all_platforms)
+    growth = mom_growth_and_velocity(monthly_search_points)
+    latest_search = None
+    if monthly_search_points:
+        latest_search = sorted(monthly_search_points, key=lambda p: p["year_month"])[-1]["value"]
+    metrics = {
+        "search_interest": latest_search,
+        "mom_growth": growth["mom_growth"],
+        "recent_velocity": growth["recent_velocity"],
+        "platform_overlap": exposure["platform_overlap"],
+        "groupbuy_exposure": exposure["groupbuy_exposure"],
+    }
+    return metrics, exposure
+
+
+def mom_growth_and_velocity(monthly_points):
+    """
+    monthly_points: [{"year_month": "YYYY-MM", "value": float}, ...] (순서 무관, 같은 소스 내 지수만 사용)
+    전월 대비 상승률(%)과 최근 상승 속도(0~100 정규화)를 계산해요.
+    2개 달 미만이면 계산할 수 없으니 None을 돌려줘요(임의로 0%로 채우지 않음).
+    """
+    pts = sorted([p for p in monthly_points if p.get("value") is not None], key=lambda p: p["year_month"])
+    if len(pts) < 2:
+        return {"mom_growth": None, "recent_velocity": None}
+
+    prev, last = pts[-2]["value"], pts[-1]["value"]
+    mom_growth = ((last - prev) / prev * 100) if prev else None
+
+    # 최근 상승 속도 = 최근 구간 상승률을 0~100으로 캡한 값(음수는 0으로) — 급상승 판정에만 씀
+    recent_velocity = None
+    if mom_growth is not None:
+        recent_velocity = max(0.0, min(mom_growth, 100.0))
+
+    return {"mom_growth": mom_growth, "recent_velocity": recent_velocity}
+
+
+def fetch_google_trends_for_group(group_name, terms, timeframe="today 3-m", geo="KR"):
+    """
+    Google은 공식 검색 트렌드 API가 없어서 비공식 라이브러리(pytrends)로 시도해요.
+    실패(라이브러리 미설치/네트워크 차단/일시적 차단 등)하면 예외를 삼키고 (None, 에러메시지)를 돌려줘요 —
+    이 함수가 실패해도 대시보드 전체가 죽지 않고 그냥 "구글 지표 없음"으로 처리돼요.
+    반환: (index_value 0~100 | None, error_message | None)
+    """
+    try:
+        from pytrends.request import TrendReq
+    except ImportError:
+        return None, "pytrends 라이브러리가 설치되어 있지 않아요."
+
+    try:
+        pytrends = TrendReq(hl="ko-KR", tz=540)
+        keywords = (terms or [group_name])[:5]  # pytrends는 한 번에 최대 5개 키워드까지만 허용
+        pytrends.build_payload(keywords, timeframe=timeframe, geo=geo)
+        df = pytrends.interest_over_time()
+        if df is None or df.empty:
+            return None, "구글 트렌드에서 데이터를 찾지 못했어요."
+        # 여러 키워드의 최근 값 중 최댓값을 이 상품군의 대표 지수로 사용
+        latest = df.iloc[-1]
+        value = max(float(latest[k]) for k in keywords if k in latest.index)
+        return round(value, 1), None
+    except Exception as e:  # 네트워크 오류, 일시 차단(429) 등 — 보조 지표라 조용히 생략
+        return None, f"구글 트렌드 조회 실패(생략됨): {e}"
+
+
+def fetch_naver_trends_for_group(group_name, terms, months=6):
+    """
+    네이버 데이터랩 검색어트렌드 API(공식)로 상품군의 월별 상대 검색지수(0~100)를 가져와요.
+    한 번 호출로 최근 {months}개월치 월별 지수를 한꺼번에 받아와요(전월 대비 상승률 계산에 필요).
+    NAVER_CLIENT_ID/SECRET이 없거나 요청이 실패하면 예외를 삼키고 (빈 목록, 에러메시지)를 돌려줘요 —
+    이 함수가 실패해도 대시보드 전체가 죽지 않고 그냥 "네이버 지표 없음"으로 처리돼요.
+    반환: (points, error) — points: [{"year_month": "YYYY-MM", "value": float}, ...]
+    """
+    import os
+    import json as _json
+    from datetime import date as _date
+
+    client_id = os.environ.get("NAVER_CLIENT_ID")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        return [], "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET이 설정되어 있지 않아요."
+
+    keywords = (terms or [group_name])[:20]  # 네이버 데이터랩은 그룹당 최대 20개 키워드까지 허용
+
+    end = _date.today()
+    y, m = end.year, end.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    start = _date(y, m, 1)
+
+    payload = {
+        "startDate": start.isoformat(),
+        "endDate": end.isoformat(),
+        "timeUnit": "month",
+        "keywordGroups": [{"groupName": group_name, "keywords": keywords}],
+    }
+    headers = {
+        "X-NCP-APIGW-API-KEY-ID": client_id,
+        "X-NCP-APIGW-API-KEY": client_secret,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        import requests
+        resp = requests.post(
+            "https://naveropenapi.apigw.ntruss.com/datalab/v1/search",
+            headers=headers, data=_json.dumps(payload), timeout=10,
+        )
+    except Exception as e:
+        return [], f"네이버 API 요청 중 오류: {e}"
+
+    if resp.status_code != 200:
+        return [], f"네이버 API 오류(status {resp.status_code}): {resp.text[:200]}"
+
+    try:
+        data = resp.json()
+        result = data["results"][0]
+        points = [
+            {"year_month": d["period"][:7], "value": float(d["ratio"])}
+            for d in result.get("data", [])
+        ]
+    except Exception as e:
+        return [], f"네이버 응답을 해석하지 못했어요: {e}"
+
+    return points, None
+
+
+# ---------------------------------------------------------------------------
+# 네이버 데이터랩 "쇼핑인사이트" — 검색어트렌드와는 별도의 공식 API예요.
+# 쇼핑 화면에서의 검색/구매 관심도를 보여줘서, 일반 검색어트렌드보다 "사길 원하는 관심도"에 더 가까워요.
+# 이 API는 카테고리(분야) 코드가 반드시 필요해요 — 네이버가 정해둔 대분류 코드를 그대로 써요.
+# (공개된 자료 기준으로 정리한 목록이라, 네이버가 코드를 바꾸면 그 카테고리만 조용히 실패해요 —
+#  다른 카테고리나 대시보드 전체에는 영향 없어요.)
+# ---------------------------------------------------------------------------
+NAVER_SHOPPING_CATEGORIES = [
+    ("패션의류", "50000000"),
+    ("패션잡화", "50000001"),
+    ("화장품/미용", "50000002"),
+    ("디지털/가전", "50000003"),
+    ("가구/인테리어", "50000004"),
+    ("출산/육아", "50000005"),
+    ("식품", "50000006"),
+    ("스포츠/레저", "50000007"),
+    ("생활/건강", "50000008"),
+    ("여가/생활편의", "50000009"),
+]
+
+
+def _naver_shopping_date_range(months):
+    from datetime import date as _date
+    end = _date.today()
+    y, m = end.year, end.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    start = _date(y, m, 1)
+    return start.isoformat(), end.isoformat()
+
+
+def fetch_naver_shopping_keyword_trend(category_code, group_name, terms, months=6):
+    """
+    네이버 데이터랩 쇼핑인사이트 - "카테고리 내 키워드별 트렌드" API(공식)를 호출해요.
+    지정한 쇼핑 카테고리 "안에서" 이 키워드들이 얼마나 검색/조회되는지 월별 상대지수(0~100)로 받아와요.
+    category_code가 없으면(상품군에 쇼핑 카테고리를 아직 지정하지 않았으면) 바로 안내 메시지를 돌려줘요.
+    반환: (points, error) — points: [{"year_month": "YYYY-MM", "value": float}, ...]
+    """
+    import os
+    import json as _json
+
+    if not category_code:
+        return [], "이 상품군에 네이버 쇼핑 카테고리가 지정되어 있지 않아요."
+
+    client_id = os.environ.get("NAVER_CLIENT_ID")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        return [], "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET이 설정되어 있지 않아요."
+
+    keywords = (terms or [group_name])[:20]
+    start_date, end_date = _naver_shopping_date_range(months)
+
+    cat_value = int(category_code) if str(category_code).isdigit() else category_code
+    payload = {
+        "startDate": start_date,
+        "endDate": end_date,
+        "timeUnit": "month",
+        "category": cat_value,
+        "keyword": [{"name": group_name, "param": keywords}],
+        "device": "",
+        "gender": "",
+        "ages": [],
+    }
+    headers = {
+        "X-NCP-APIGW-API-KEY-ID": client_id,
+        "X-NCP-APIGW-API-KEY": client_secret,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        import requests
+        resp = requests.post(
+            "https://naverapihub.apigw.ntruss.com/shopping/v1/category/keywords",
+            headers=headers, data=_json.dumps(payload), timeout=10,
+        )
+    except Exception as e:
+        return [], f"네이버 쇼핑인사이트 요청 중 오류: {e}"
+
+    if resp.status_code != 200:
+        return [], f"네이버 쇼핑인사이트 오류(status {resp.status_code}): {resp.text[:200]}"
+
+    try:
+        data = resp.json()
+        result = data["results"][0]
+        points = [
+            {"year_month": d["period"][:7], "value": float(d["ratio"])}
+            for d in result.get("data", [])
+        ]
+    except Exception as e:
+        return [], f"네이버 쇼핑인사이트 응답을 해석하지 못했어요: {e}"
+
+    return points, None
+
+
+def fetch_naver_shopping_category_trend(category_code, category_name="", months=6):
+    """
+    네이버 데이터랩 쇼핑인사이트 - "분야(카테고리) 전체 트렌드" API(공식)를 호출해요.
+    특정 키워드가 아니라 그 쇼핑 카테고리 전체의 관심도 흐름을 보여줘요(비교 기준선으로 유용해요).
+    반환: (points, error)
+    """
+    import os
+    import json as _json
+
+    if not category_code:
+        return [], "카테고리 코드가 없어요."
+
+    client_id = os.environ.get("NAVER_CLIENT_ID")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        return [], "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET이 설정되어 있지 않아요."
+
+    start_date, end_date = _naver_shopping_date_range(months)
+    payload = {
+        "startDate": start_date,
+        "endDate": end_date,
+        "timeUnit": "month",
+        "category": [{"name": category_name or str(category_code), "param": [str(category_code)]}],
+        "device": "",
+        "gender": "",
+        "ages": [],
+    }
+    headers = {
+        "X-NCP-APIGW-API-KEY-ID": client_id,
+        "X-NCP-APIGW-API-KEY": client_secret,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        import requests
+        resp = requests.post(
+            "https://naverapihub.apigw.ntruss.com/shopping/v1/categories",
+            headers=headers, data=_json.dumps(payload), timeout=10,
+        )
+    except Exception as e:
+        return [], f"네이버 쇼핑인사이트 요청 중 오류: {e}"
+
+    if resp.status_code != 200:
+        return [], f"네이버 쇼핑인사이트 오류(status {resp.status_code}): {resp.text[:200]}"
+
+    try:
+        data = resp.json()
+        result = data["results"][0]
+        points = [
+            {"year_month": d["period"][:7], "value": float(d["ratio"])}
+            for d in result.get("data", [])
+        ]
+    except Exception as e:
+        return [], f"네이버 쇼핑인사이트 응답을 해석하지 못했어요: {e}"
+
+    return points, None
+
+
+def compute_opportunity_score(trend_score, seeding_score, gongu_score, fit_score, weights):
+    """
+    weights: {"trend_weight","seeding_weight","gongu_weight","fit_weight"} (합계가 꼭 100일 필요는 없음 — 비율로 계산)
+    각 점수 중 None인 항목은 제외하고, 남은 항목의 가중치 비율로 재계산해요.
+    """
+    components = {
+        "trend": (trend_score, weights.get("trend_weight", 0)),
+        "seeding": (seeding_score, weights.get("seeding_weight", 0)),
+        "gongu": (gongu_score, weights.get("gongu_weight", 0)),
+        "fit": (fit_score, weights.get("fit_weight", 0)),
+    }
+    used, missing, weighted_sum, weight_sum = [], [], 0.0, 0.0
+    for key, (value, w) in components.items():
+        if value is None:
+            missing.append(key)
+            continue
+        used.append(key)
+        weighted_sum += value * w
+        weight_sum += w
+    if weight_sum == 0:
+        return {"score": None, "used": used, "missing": missing}
+    return {"score": round(weighted_sum / weight_sum, 1), "used": used, "missing": missing}
