@@ -34,7 +34,14 @@ def index():
     total_followers = sum(r["followers"] for r in records)
     total_revenue = sum(r["revenue"] for r in records)
     avg_revenue = total_revenue / n if n else 0
-    per1k = (total_revenue / total_followers * 1000) if total_followers else 0
+    per_follower = (total_revenue / total_followers) if total_followers else 0
+    # 팔로워 기준 매출 벤치마크 (1만 / 5만 / 10만 / 30만명 가정 시 예상 매출)
+    follower_benchmarks = [
+        {"label": "팔로워 1만명 기준", "revenue": per_follower * 10_000},
+        {"label": "팔로워 5만명 기준", "revenue": per_follower * 50_000},
+        {"label": "팔로워 10만명 기준", "revenue": per_follower * 100_000},
+        {"label": "팔로워 30만명 기준", "revenue": per_follower * 300_000},
+    ]
     avg_return = sum(gongu_return_pct(r) for r in records) / n if n else 0
 
     # 셀러별 성과 분석 (모든 회차 합산)
@@ -132,7 +139,7 @@ def index():
     return render_template(
         "gongu.html",
         brands=BRANDS, months=MONTHS, brand=brand, month=month,
-        records=records, count=n, avg_revenue=avg_revenue, per1k=per1k, avg_return=avg_return,
+        records=records, count=n, avg_revenue=avg_revenue, follower_benchmarks=follower_benchmarks, avg_return=avg_return,
         sellers=sellers, tiers=tiers, products=products, forecast=forecast,
         fc_followers=fc_followers, fc_price=fc_price,
         won=won, pct=pct, net_sold=gongu_net_sold, return_pct=gongu_return_pct, per1k_of=gongu_per1k,
