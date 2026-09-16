@@ -4,7 +4,7 @@
 <div class="block-head">
   <div class="eyebrow">ANALYSIS · EXTERNAL MALL TREND</div>
   <h2>외부몰 트렌드 분석</h2>
-  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아)에서 확인한 인기 셀러·제품을 기록하면, 인기 셀러 분석과 카테고리별 인사이트가 자동으로 집계돼요. <a href="{{ url_for('trend.groups_index') }}">상품군(비슷한 검색어 묶음) 관리 →</a></p>
+  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아)마다 인기셀러를 등록하면, 여러 플랫폼에 공통으로 등록된 셀러와 많이 공구되는 브랜드·제품 TOP10이 자동으로 집계돼요. <a href="{{ url_for('trend.groups_index') }}">상품군(비슷한 검색어 묶음) 관리 →</a></p>
 </div>
 
 <div class="chart-card" style="margin-bottom:16px">
@@ -26,6 +26,116 @@
   </div>
 {% endif %}
 
+<div class="block-head" style="margin-top:4px">
+  <h2 style="font-size:18px">① 플랫폼별 인기셀러 등록</h2>
+  <p class="note" style="margin:0">플랫폼마다 최대 20명까지 등록할 수 있어요. 20명이 다 차면 삭제 후에만 새로 추가할 수 있어요.</p>
+</div>
+<div class="platform-seller-grid" style="margin-bottom:16px">
+  {% for p in platforms %}
+  {% set ps = platform_sellers[p] %}
+  <div class="chart-card">
+    <div class="chart-card-head" style="align-items:center">
+      <div><h3>{{ p }}</h3><div class="unit">{{ ps.count }} / {{ platform_seller_cap }}명</div></div>
+      {% if not ps.full %}
+      <details><summary class="refresh-btn" style="cursor:pointer;list-style:none">+ 등록</summary>
+        <form method="post" action="{{ url_for('trend.platform_sellers_add') }}" class="ins-form-grid" style="margin-top:12px">
+          <input type="hidden" name="platform" value="{{ p }}">
+          <label>셀러명<input name="seller" placeholder="셀러명" required></label>
+          <label>브랜드<input name="brand" placeholder="브랜드(선택)"></label>
+          <label>제품<input name="product" placeholder="제품명(선택)"></label>
+          <label>최근 공구 빈도<input name="frequency_note" placeholder="예: 주 1회(선택)"></label>
+          <label>확인일<input name="check_date" type="date"></label>
+          <label class="ins-wide">링크<input name="link" placeholder="https://...(선택)"></label>
+          <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">등록</button></div>
+        </form>
+      </details>
+      {% endif %}
+    </div>
+    {% if ps.full %}
+      <p class="note" style="margin:0 0 8px;color:#a86a06">⚠ TOP {{ platform_seller_cap }}명이 모두 채워졌어요. 아래에서 삭제한 뒤에 새로 등록해 주세요.</p>
+    {% endif %}
+    <div class="top10-list">
+      {% for s in ps.rows %}
+        <div class="mini-seller-row">
+          <span class="mini-seller-name">{{ loop.index }}. {{ s.seller }}</span>
+          <span class="mini-seller-sub">{{ ([s.brand, s.product]|select|join(' ')) or '제품 정보 없음' }}{% if s.frequency_note %} · {{ s.frequency_note }}{% endif %}</span>
+          {% if s.link %}<a href="{{ s.link }}" target="_blank" rel="noopener" style="font-size:11px">열기</a>{% endif %}
+          <form method="post" action="{{ url_for('trend.platform_sellers_delete', seller_id=s.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form>
+        </div>
+      {% else %}
+        <p class="note" style="margin:0">등록된 인기셀러가 없어요.</p>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="block-head">
+  <h2 style="font-size:18px">② 통합 분석</h2>
+  <p class="note" style="margin:0">위에서 등록한 6개 플랫폼의 인기셀러 데이터를 통합해서 비교해요.</p>
+</div>
+<div class="split-2col">
+  <div class="chart-card">
+    <div class="chart-card-head"><div><h3>공통 인기셀러 분석</h3><div class="unit">여러 플랫폼에 동시에 등록된 셀러를 우선 보여줘요 (공통 플랫폼 수가 많은 순). 최대 20명, 10명씩 2페이지예요.</div></div></div>
+    {% if common_sellers_page1 or common_sellers_page2 %}
+    <div class="tab-toggle">
+      <button type="button" class="is-active" onclick="document.getElementById('cs-page-1').hidden=false;document.getElementById('cs-page-2').hidden=true;this.classList.add('is-active');this.nextElementSibling.classList.remove('is-active')">1페이지</button>
+      <button type="button" onclick="document.getElementById('cs-page-1').hidden=true;document.getElementById('cs-page-2').hidden=false;this.classList.add('is-active');this.previousElementSibling.classList.remove('is-active')">2페이지</button>
+    </div>
+    {% endif %}
+    <div id="cs-page-1" class="top10-list">
+      {% for s in common_sellers_page1 %}
+        <div class="top10-row">
+          <span class="top10-rank">{{ loop.index }}</span>
+          <div class="top10-info">
+            <div class="top10-name">{{ s.seller }} <span class="ins-badge {{ 'pass' if s.platform_count > 1 else 'warn' }}">{{ s.platform_count }}개 플랫폼 공통</span></div>
+            <div class="top10-sub">{{ s.platforms|join(', ') }}</div>
+            <div class="top10-sub">{{ s.brand_products|join(', ') if s.brand_products else '등록된 브랜드/제품 정보 없음' }}</div>
+            <div class="top10-sub">{{ s.frequency_notes|join(', ') if s.frequency_notes else '공구 빈도 정보 없음' }}</div>
+          </div>
+        </div>
+      {% else %}
+        <p class="note" style="margin:0">인기셀러를 등록하면 여기에 나열돼요.</p>
+      {% endfor %}
+    </div>
+    <div id="cs-page-2" class="top10-list" hidden>
+      {% for s in common_sellers_page2 %}
+        <div class="top10-row">
+          <span class="top10-rank">{{ loop.index + 10 }}</span>
+          <div class="top10-info">
+            <div class="top10-name">{{ s.seller }} <span class="ins-badge {{ 'pass' if s.platform_count > 1 else 'warn' }}">{{ s.platform_count }}개 플랫폼 공통</span></div>
+            <div class="top10-sub">{{ s.platforms|join(', ') }}</div>
+            <div class="top10-sub">{{ s.brand_products|join(', ') if s.brand_products else '등록된 브랜드/제품 정보 없음' }}</div>
+            <div class="top10-sub">{{ s.frequency_notes|join(', ') if s.frequency_notes else '공구 빈도 정보 없음' }}</div>
+          </div>
+        </div>
+      {% else %}
+        <p class="note" style="margin:0">11~20위 셀러가 없어요.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-card-head"><div><h3>공구 인기 브랜드·제품 TOP10</h3><div class="unit">6개 플랫폼 전체 데이터를 통합해서(카테고리 구분 없이) 등록 횟수가 많은 순으로 보여줘요.</div></div></div>
+    <div class="chart-svg-wrap">
+      <table class="data-table">
+        <thead><tr><th>순위</th><th>브랜드</th><th>제품명</th><th>등록 횟수</th><th>확인된 플랫폼 수</th></tr></thead>
+        <tbody>
+          {% for b in top_brand_products %}
+          <tr><td>{{ loop.index }}</td><td>{{ b.brand }}</td><td>{{ b.product }}</td><td>{{ b.count }}회</td><td>{{ b.platform_count }} / {{ platforms|length }}개</td></tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;color:var(--muted2);padding:20px 0">인기셀러 등록 시 브랜드·제품을 함께 입력하면 여기에 집계돼요.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="block-head" style="margin-top:24px">
+  <h2 style="font-size:18px">상품군 태깅용 인기 셀러 기록 <span style="font-weight:400;font-size:12.5px;color:var(--muted)">(기존 기능, 그대로 유지)</span></h2>
+  <p class="note" style="margin:0">여기 등록한 기록에 "상품군"을 지정하면 바로 아래 "상품군별 공구 시장 노출"에 집계돼요. 위 ①·②와는 별개로, 매출 기회 대시보드 점수 계산을 위해 계속 쓰는 기록이에요.</p>
+</div>
 <div class="chart-card" style="margin-bottom:16px">
   <div class="chart-card-head" style="align-items:center">
     <div><div class="eyebrow" style="margin-bottom:4px">RECORDS</div><h3>인기 셀러 등록</h3></div>
@@ -72,30 +182,8 @@
   <p class="note" style="margin-top:12px"><form method="post" action="{{ url_for('trend.clear') }}" onsubmit="return confirm('전체 삭제할까요?')"><button class="refresh-btn" type="submit">전체 초기화</button></form></p>
 </div>
 
-<div class="chart-card" style="margin-bottom:16px">
-  <div class="chart-card-head"><div><h3>인기 셀러 분석</h3><div class="unit">등록된 셀러 데이터를 셀러별로 묶어 등록 횟수·확인된 플랫폼 수·평균 공구가 순으로 나열해요.</div></div></div>
-  <div class="top10-list">
-    {% for s in popular_sellers %}
-      <div class="top10-row">
-        <span class="top10-rank">{{ loop.index }}</span>
-        <div class="top10-info">
-          <div class="top10-name">{{ s.seller }}</div>
-          <div class="top10-sub">{{ s.category }} · {{ s.platform_count }}개 플랫폼에서 확인</div>
-        </div>
-        <div class="top10-meta">
-          <span class="top10-metric rank">{{ s.count }}회 등록</span>
-          <span class="top10-metric" style="font-weight:600;font-size:11px;color:var(--muted)">{{ '{:,}'.format(s.avg_price|round|int) + '원' if s.avg_price is not none else '가격 정보 없음' }}</span>
-          {% if s.link %}<a href="{{ s.link }}" target="_blank" rel="noopener">열기 ↗</a>{% endif %}
-        </div>
-      </div>
-    {% else %}
-      <p class="note" style="margin:0">셀러를 등록하면 인기 셀러 분석이 여기에 나열됩니다.</p>
-    {% endfor %}
-  </div>
-</div>
-
-<div class="chart-card" style="margin-bottom:16px">
-  <div class="chart-card-head"><div><h3>상품군별 공구 시장 노출</h3><div class="unit">상품군이 지정된 기록만 집계돼요. 여러 플랫폼에서 동시에 등장할수록, 최근 30일 내 등록이 많을수록 노출도가 높아요.</div></div></div>
+<div class="chart-card">
+  <div class="chart-card-head"><div><h3>상품군별 공구 시장 노출</h3><div class="unit">상품군이 지정된 기록만 집계돼요. 여러 플랫폼에서 동시에 등장할수록, 최근 30일 내 등록이 많을수록 노출도가 높아요. (매출 기회 대시보드 점수 계산에도 쓰이는 기존 기능이라 그대로 유지했어요)</div></div></div>
   <div class="top10-list">
     {% for s in group_summaries %}
       <div class="top10-row">
@@ -112,24 +200,8 @@
         </div>
       </div>
     {% else %}
-      <p class="note" style="margin:0">기록에 상품군을 지정하면 여기에 집계돼요. (표 오른쪽 "상품군" 열에서 지정)</p>
+      <p class="note" style="margin:0">상품군 관리에서 "상품군"을 만들고 <a href="{{ url_for('trend.groups_index') }}">상품군 관리</a> 화면에서 지정하면 여기에 집계돼요.</p>
     {% endfor %}
-  </div>
-</div>
-
-<div class="chart-card">
-  <div class="chart-card-head"><div><h3>카테고리별 소구 인사이트</h3><div class="unit">등록된 인기 셀러 데이터를 카테고리 기준으로 총합·평균 집계한 결과예요.</div></div></div>
-  <div class="chart-svg-wrap">
-    <table class="data-table">
-      <thead><tr><th>카테고리</th><th>등록 건수</th><th>평균 공구가</th><th>확인된 플랫폼 수</th></tr></thead>
-      <tbody>
-        {% for c in category_insights %}
-        <tr><td>{{ c.category }}</td><td>{{ c.count }}건</td><td>{{ ('{:,}'.format(c.avg_price|round|int) + '원') if c.avg_price is not none else '-' }}</td><td>{{ c.platform_count }} / {{ platforms|length }}개</td></tr>
-        {% else %}
-        <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:20px 0">인기 셀러를 등록하면 카테고리별 집계가 표시됩니다.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
   </div>
 </div>
 {% endblock %}
