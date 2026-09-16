@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 
 import db
-from analysis import gongu_net_sold, gongu_return_pct, gongu_per1k, gongu_tier, TIER_ORDER, won, pct, BRANDS
+from analysis import gongu_net_sold, gongu_return_pct, gongu_tier, TIER_ORDER, won, pct, BRANDS
 
 gongu_bp = Blueprint("gongu", __name__, url_prefix="/gongu-perf")
 
@@ -83,9 +83,11 @@ def index():
     for t in TIER_ORDER:
         arr = tier_groups.get(t)
         if not arr:
+            tiers.append({"tier": t, "count": 0, "avg_revenue": 0, "avg_sold": 0})
             continue
         tiers.append({
             "tier": t,
+            "count": len(arr),
             "avg_revenue": sum(x["revenue"] for x in arr) / len(arr),
             "avg_sold": sum(gongu_net_sold(x) for x in arr) / len(arr),
         })
@@ -142,7 +144,7 @@ def index():
         records=records, count=n, avg_revenue=avg_revenue, follower_benchmarks=follower_benchmarks, avg_return=avg_return,
         sellers=sellers, tiers=tiers, products=products, forecast=forecast,
         fc_followers=fc_followers, fc_price=fc_price,
-        won=won, pct=pct, net_sold=gongu_net_sold, return_pct=gongu_return_pct, per1k_of=gongu_per1k,
+        won=won, pct=pct, net_sold=gongu_net_sold, return_pct=gongu_return_pct,
     )
 
 
