@@ -424,6 +424,34 @@ def delete_platform_seller(seller_id):
     conn.close()
 
 
+def replace_platform_sellers(platform, rows, created_by):
+    """자동 수집(Cowork 예약작업)이 한 플랫폼의 인기셀러 20명을 통째로 교체할 때 써요.
+    기존 그 플랫폼 행을 전부 지우고 새 목록으로 다시 채워요(다른 플랫폼은 건드리지 않음).
+    최대 20명까지만 저장하고, 나머지는 조용히 잘라내요."""
+    conn = get_conn()
+    conn.execute("DELETE FROM trend_platform_sellers WHERE platform = ?", (platform,))
+    created_at = now_iso()
+    for r in rows[:20]:
+        conn.execute(
+            """INSERT INTO trend_platform_sellers
+               (platform, seller, brand, product, frequency_note, link, check_date, created_by, created_at)
+               VALUES (:platform, :seller, :brand, :product, :frequency_note, :link, :check_date, :created_by, :created_at)""",
+            {
+                "platform": platform,
+                "seller": (r.get("seller") or "").strip(),
+                "brand": (r.get("brand") or "").strip(),
+                "product": (r.get("product") or "").strip(),
+                "frequency_note": (r.get("frequency_note") or "").strip(),
+                "link": (r.get("link") or "").strip(),
+                "check_date": (r.get("check_date") or "").strip(),
+                "created_by": created_by,
+                "created_at": created_at,
+            },
+        )
+    conn.commit()
+    conn.close()
+
+
 # ---------- 댓글 이벤트 추첨 ----------
 
 def create_giveaway_event(data, winners, created_by):
