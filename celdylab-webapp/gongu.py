@@ -13,6 +13,22 @@ def _require_login():
 
 MONTHS = [f"{i:02d}" for i in range(1, 13)]
 
+# 신규 공구 예상 계산기 - 팔로워 수 드롭다운 선택지 (10만 단위, 10만 이하 ~ 70만 이상)
+FC_FOLLOWER_OPTIONS = [
+    {"value": 100000, "label": "10만 이하"},
+    {"value": 200000, "label": "20만"},
+    {"value": 300000, "label": "30만"},
+    {"value": 400000, "label": "40만"},
+    {"value": 500000, "label": "50만"},
+    {"value": 600000, "label": "60만"},
+    {"value": 700000, "label": "70만 이상"},
+]
+
+# 신규 공구 예상 계산기 - 보수적/권장/공격적 재고를 예상 판매 수량의 몇 %로 잡을지
+FC_LOW_RATIO = 0.8
+FC_MID_RATIO = 1.05
+FC_HIGH_RATIO = 1.3
+
 
 def _most_frequent(values):
     values = [v for v in values if v]
@@ -131,9 +147,12 @@ def index():
             forecast = {
                 "revenue": won(expected_revenue),
                 "qty": f"{round(qty):,}개",
-                "low": f"{round(qty * 0.8):,}개",
-                "mid": f"{round(qty * 1.05):,}개",
-                "high": f"{round(qty * 1.3):,}개",
+                "low": f"{round(qty * FC_LOW_RATIO):,}개",
+                "mid": f"{round(qty * FC_MID_RATIO):,}개",
+                "high": f"{round(qty * FC_HIGH_RATIO):,}개",
+                "low_pct": f"예상 판매 수량의 {FC_LOW_RATIO * 100:.0f}%",
+                "mid_pct": f"예상 판매 수량의 {FC_MID_RATIO * 100:.0f}%",
+                "high_pct": f"예상 판매 수량의 {FC_HIGH_RATIO * 100:.0f}%",
                 "basis_count": len(tier_records),
                 "basis_tier": target_tier,
                 "used_tier": len(tier_records) >= 2,
@@ -147,7 +166,7 @@ def index():
         brands=BRANDS, months=MONTHS, brand=brand, month=month,
         records=records, count=n, avg_revenue=avg_revenue, follower_benchmarks=follower_benchmarks, avg_return=avg_return,
         sellers=sellers, tiers=tiers, products=products, forecast=forecast,
-        fc_followers=fc_followers, fc_price=fc_price,
+        fc_followers=fc_followers, fc_price=fc_price, fc_follower_options=FC_FOLLOWER_OPTIONS,
         won=won, pct=pct, net_sold=gongu_net_sold, return_pct=gongu_return_pct, manwon=manwon,
     )
 
