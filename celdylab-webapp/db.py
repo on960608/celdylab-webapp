@@ -274,6 +274,19 @@ def delete_gongu_record(record_id):
     conn.close()
 
 
+def update_gongu_record(record_id, data):
+    conn = get_conn()
+    conn.execute(
+        """UPDATE gongu_records SET
+            month=:month, channel=:channel, brand=:brand, product=:product, seller=:seller,
+            followers=:followers, link=:link, revenue=:revenue, sold_qty=:sold_qty, return_qty=:return_qty
+        WHERE id=:id""",
+        {**data, "id": record_id},
+    )
+    conn.commit()
+    conn.close()
+
+
 def clear_gongu_records():
     conn = get_conn()
     conn.execute("DELETE FROM gongu_records")
