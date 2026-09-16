@@ -609,8 +609,10 @@ def fetch_naver_trends_for_group(group_name, terms, months=6):
 
     try:
         import requests
+        # 2026-09 네이버클라우드플랫폼 안내: 예전 경로(/datalab/v1/search)가 새 경로(/search-trend/v1/search)로 바뀌었어요.
+        # 요청/응답 형식(키워드그룹·period·ratio 등)은 그대로라서 주소만 바꿨어요.
         resp = requests.post(
-            "https://naveropenapi.apigw.ntruss.com/datalab/v1/search",
+            "https://naverapihub.apigw.ntruss.com/search-trend/v1/search",
             headers=headers, data=_json.dumps(payload), timeout=10,
         )
     except Exception as e:
