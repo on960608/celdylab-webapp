@@ -362,3 +362,73 @@ def api_create_records():
 def api_status():
     """등록 여부만 가볍게 확인할 수 있는 헬스체크 (인증 불필요, 민감정보 없음)."""
     return jsonify({"api_enabled": bool(os.environ.get("AUTOMATION_API_KEY"))})
+
+
+# ---------------------------------------------------------------------------
+# 플랫폼별 인기셀러 자동 수집 API (Cowork 예약작업 전용, 매주 1회)
+#
+# 위 /api/records용 AUTOMATION_API_KEY와는 별개의 전용 키(PLATFORM_SELLER_API_KEY)를 써요.
+# 한 번 호출할 때마다 그 플랫폼의 기존 20명을 통째로 새 목록으로 교체해요(다른 플랫폼은 그대로).
+#
+# 사용 예:
+#   POST https://<railway-domain>/trend/api/platform-sellers
+#   Headers: Authorization: Bearer <PLATFORM_SELLER_API_KEY>
+#            Content-Type: application/json
+#   Body:
+#   {
+#     "platform": "82market",
+#     "sellers": [
+#       {"seller": "드엘리사 | yoonjung Lee", "brand": "", "product": "", "frequency_note": "", "link": "https://..."},
+#       ...  (최대 20개, 그 이상은 잘려요)
+#     ]
+#   }
+#   응답: {"ok": true, "platform": "82market", "count": N}
+# ---------------------------------------------------------------------------
+
+def _check_platform_seller_api_key():
+    expected = os.environ.get("PLATFORM_SELLER_API_KEY")
+    if not expected:
+        return False
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else request.headers.get("X-API-Key", "")
+    return token == expected
+
+
+@trend_bp.route("/api/platform-sellers", methods=["POST"])
+def api_replace_platform_sellers():
+    if not _check_platform_seller_api_key():
+        return jsonify({"ok": False, "error": "인증 실패 (PLATFORM_SELLER_API_KEY 미설정 또는 키 불일치)"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    platform = str(payload.get("platform", "")).strip()
+    if platform not in TREND_PLATFORMS:
+        return jsonify({"ok": False, "error": f"platform은 다음 중 하나여야 해요: {TREND_PLATFORMS}"}), 400
+
+    sellers = payload.get("sellers")
+    if not isinstance(sellers, list):
+        return jsonify({"ok": False, "error": "sellers 배열이 필요해요."}), 400
+
+    rows = []
+    for s in sellers:
+        if not isinstance(s, dict):
+            continue
+        seller = str(s.get("seller", "")).strip()
+        if not seller:
+            continue
+        rows.append({
+            "seller": seller,
+            "brand": str(s.get("brand", "")).strip(),
+            "product": str(s.get("product", "")).strip(),
+            "frequency_note": str(s.get("frequency_note", "")).strip(),
+            "link": str(s.get("link", "")).strip(),
+            "check_date": str(s.get("check_date", "")).strip(),
+        })
+
+    db.replace_platform_sellers(platform, rows, "automation")
+    return jsonify({"ok": True, "platform": platform, "count": len(rows[:20])})
+
+
+@trend_bp.route("/api/platform-sellers", methods=["GET"])
+def api_platform_seller_status():
+    """등록 여부만 가볍게 확인할 수 있는 헬스체크 (인증 불필요, 민감정보 없음)."""
+    return jsonify({"api_enabled": bool(os.environ.get("PLATFORM_SELLER_API_KEY"))})
