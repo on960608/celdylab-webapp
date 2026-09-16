@@ -54,7 +54,7 @@
     {% if ps.full %}
       <p class="note" style="margin:0 0 8px;color:#a86a06">⚠ TOP {{ platform_seller_cap }}명이 모두 채워졌어요. 아래에서 삭제한 뒤에 새로 등록해 주세요.</p>
     {% endif %}
-    <div class="top10-list">
+    <div class="top10-list" data-paginate="5" data-pager="ps-pager-{{ loop.index }}">
       {% for s in ps.rows %}
         <div class="mini-seller-row">
           <span class="mini-seller-name">{{ loop.index }}. {{ s.seller }}</span>
@@ -66,6 +66,7 @@
         <p class="note" style="margin:0">등록된 인기셀러가 없어요.</p>
       {% endfor %}
     </div>
+    <div class="tab-toggle" id="ps-pager-{{ loop.index }}" style="margin-top:10px;margin-bottom:0"></div>
   </div>
   {% endfor %}
 </div>
@@ -76,15 +77,9 @@
 </div>
 <div class="split-2col">
   <div class="chart-card">
-    <div class="chart-card-head"><div><h3>공통 인기셀러 분석</h3><div class="unit">여러 플랫폼에 동시에 등록된 셀러를 우선 보여줘요 (공통 플랫폼 수가 많은 순). 최대 20명, 10명씩 2페이지예요.</div></div></div>
-    {% if common_sellers_page1 or common_sellers_page2 %}
-    <div class="tab-toggle">
-      <button type="button" class="is-active" onclick="document.getElementById('cs-page-1').hidden=false;document.getElementById('cs-page-2').hidden=true;this.classList.add('is-active');this.nextElementSibling.classList.remove('is-active')">1페이지</button>
-      <button type="button" onclick="document.getElementById('cs-page-1').hidden=true;document.getElementById('cs-page-2').hidden=false;this.classList.add('is-active');this.previousElementSibling.classList.remove('is-active')">2페이지</button>
-    </div>
-    {% endif %}
-    <div id="cs-page-1" class="top10-list">
-      {% for s in common_sellers_page1 %}
+    <div class="chart-card-head"><div><h3>공통 인기셀러 분석</h3><div class="unit">여러 플랫폼에 동시에 등록된 셀러를 우선 보여줘요 (공통 플랫폼 수가 많은 순). 최대 20명, 5명씩 페이지로 볼 수 있어요.</div></div></div>
+    <div id="cs-list" class="top10-list" data-paginate="5" data-pager="cs-pager">
+      {% for s in common_sellers_page1 + common_sellers_page2 %}
         <div class="top10-row">
           <span class="top10-rank">{{ loop.index }}</span>
           <div class="top10-info">
@@ -98,21 +93,7 @@
         <p class="note" style="margin:0">인기셀러를 등록하면 여기에 나열돼요.</p>
       {% endfor %}
     </div>
-    <div id="cs-page-2" class="top10-list" hidden>
-      {% for s in common_sellers_page2 %}
-        <div class="top10-row">
-          <span class="top10-rank">{{ loop.index + 10 }}</span>
-          <div class="top10-info">
-            <div class="top10-name">{{ s.seller }} <span class="ins-badge {{ 'pass' if s.platform_count > 1 else 'warn' }}">{{ s.platform_count }}개 플랫폼 공통</span></div>
-            <div class="top10-sub">{{ s.platforms|join(', ') }}</div>
-            <div class="top10-sub">{{ s.brand_products|join(', ') if s.brand_products else '등록된 브랜드/제품 정보 없음' }}</div>
-            <div class="top10-sub">{{ s.frequency_notes|join(', ') if s.frequency_notes else '공구 빈도 정보 없음' }}</div>
-          </div>
-        </div>
-      {% else %}
-        <p class="note" style="margin:0">11~20위 셀러가 없어요.</p>
-      {% endfor %}
-    </div>
+    <div class="tab-toggle" id="cs-pager" style="margin-top:10px;margin-bottom:0"></div>
   </div>
 
   <div class="chart-card">
@@ -204,4 +185,44 @@
     {% endfor %}
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('[data-paginate]').forEach(function (list) {
+    var pageSize = parseInt(list.getAttribute('data-paginate'), 10) || 5;
+    var items = Array.prototype.filter.call(list.children, function (el) {
+      return el.tagName !== 'P';
+    });
+    var pagerId = list.getAttribute('data-pager');
+    var pager = pagerId ? document.getElementById(pagerId) : null;
+    if (!items.length || items.length <= pageSize) { return; }
+    var pageCount = Math.ceil(items.length / pageSize);
+
+    function showPage(n) {
+      items.forEach(function (el, i) {
+        el.style.display = (i >= (n - 1) * pageSize && i < n * pageSize) ? '' : 'none';
+      });
+      if (pager) {
+        Array.prototype.forEach.call(pager.children, function (btn, i) {
+          btn.classList.toggle('is-active', i === n - 1);
+        });
+      }
+    }
+
+    if (pager) {
+      pager.innerHTML = '';
+      for (var i = 1; i <= pageCount; i++) {
+        (function (n) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = n + '페이지';
+          btn.addEventListener('click', function () { showPage(n); });
+          pager.appendChild(btn);
+        })(i);
+      }
+    }
+    showPage(1);
+  });
+});
+</script>
 {% endblock %}
