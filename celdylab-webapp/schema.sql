@@ -117,6 +117,22 @@ CREATE TABLE IF NOT EXISTS trend_records (
   created_at TEXT NOT NULL
 );
 
+-- 플랫폼별 인기셀러 TOP20 마스터 목록 (위 trend_records와는 별개 — 이건 "지금 활동 중인 인기셀러"를
+-- 플랫폼당 최대 20명까지 큐레이션해서 관리하는 목록이에요. trend_records는 상품군 태깅용 이력 로그라서
+-- 매출 기회 대시보드 점수 계산에 계속 쓰이므로 그대로 두고, 이 표는 새로 추가만 해요.)
+CREATE TABLE IF NOT EXISTS trend_platform_sellers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform TEXT NOT NULL DEFAULT '',
+  seller TEXT NOT NULL DEFAULT '',
+  brand TEXT NOT NULL DEFAULT '',
+  product TEXT NOT NULL DEFAULT '',
+  frequency_note TEXT NOT NULL DEFAULT '',
+  link TEXT NOT NULL DEFAULT '',
+  check_date TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
+
 -- ---------------------------------------------------------------------------
 -- 매출 기회 발굴 대시보드 — 자사 제품 속성 (자동매칭용)
 -- 제품 "이름"만 있는 archive_links와 별개로, 매칭에 필요한 속성을 여기에 채워요.
