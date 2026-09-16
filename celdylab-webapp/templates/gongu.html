@@ -52,7 +52,7 @@
             {% for r in records %}
             <tr>
               <td>{{ r.month or '-' }}</td><td>{{ r.product or '-' }}</td><td>{{ r.channel or '-' }}</td><td>{{ r.seller or '-' }}</td>
-              <td>{{ '{:,}'.format(r.followers) }}</td><td>{{ won(r.revenue) }}</td><td>{{ '{:,}'.format(net_sold(r)) }}</td>
+              <td>{{ manwon(r.followers) }}</td><td>{{ won(r.revenue) }}</td><td>{{ '{:,}'.format(net_sold(r)) }}</td>
               <td>{{ pct(return_pct(r)) }}</td>
               <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
               <td><form method="post" action="{{ url_for('gongu.delete', record_id=r.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
@@ -81,12 +81,43 @@
   <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">SELLER ANALYSIS</div><h3>셀러별 성과 분석</h3><div class="unit">모든 회차를 셀러별로 합산 (매출 높은 순)</div></div></div>
   <div class="chart-svg-wrap">
     <table class="data-table">
-      <thead><tr><th>셀러</th><th>팔로워</th><th>대표 제품</th><th>총 매출</th><th>총 판매수량</th><th>평균 반품율</th><th>진행 횟수</th></tr></thead>
+      <thead><tr><th>셀러</th><th>팔로워</th><th>대표 제품</th><th>총 매출</th><th>총 판매수량</th><th>평균 반품율</th><th>진행 횟수</th><th></th></tr></thead>
       <tbody>
         {% for s in sellers %}
-        <tr><td>{{ s.name }}</td><td>{{ '{:,}'.format(s.followers) }}</td><td>{{ s.top_product }}</td><td>{{ won(s.total_revenue) }}</td><td>{{ '{:,}'.format(s.total_sold) }}개</td><td>{{ pct(s.avg_return) }}</td><td>{{ s.count }}회</td></tr>
+        <tr>
+          <td>{{ s.name }}</td><td>{{ manwon(s.followers) }}</td><td>{{ s.top_product }}</td><td>{{ won(s.total_revenue) }}</td><td>{{ '{:,}'.format(s.total_sold) }}개</td><td>{{ pct(s.avg_return) }}</td><td>{{ s.count }}회</td>
+          <td>
+            {% if s.record %}
+            <details>
+              <summary class="refresh-btn" style="cursor:pointer;list-style:none;display:inline-block">수정</summary>
+              <form method="post" action="{{ url_for('gongu.edit', record_id=s.record.id) }}" class="ins-form-grid" style="margin-top:10px;min-width:560px">
+                <label>진행 월<input name="month" type="month" value="{{ s.record.month or '' }}"></label>
+                <label>판매 채널
+                  <select name="channel">
+                    <option value="자사몰" {{ 'selected' if s.record.channel=='자사몰' }}>자사몰</option>
+                    <option value="외부채널" {{ 'selected' if s.record.channel=='외부채널' }}>외부채널</option>
+                  </select>
+                </label>
+                <label>브랜드
+                  <select name="brand">{% for b in brands %}<option {{ 'selected' if s.record.brand==b }}>{{ b }}</option>{% endfor %}</select>
+                </label>
+                <label>제품명<input name="product" value="{{ s.record.product or '' }}" placeholder="제품명 입력"></label>
+                <label>셀러명·인플루언서명<input name="seller" value="{{ s.record.seller or '' }}" placeholder="이름 또는 계정"></label>
+                <label>팔로워 수<input name="followers" type="number" min="0" value="{{ s.record.followers }}"></label>
+                <label class="ins-wide">업로드 영상·게시물 링크<input name="link" value="{{ s.record.link or '' }}" placeholder="https://..."></label>
+                <label>매출(원)<input name="revenue" type="number" min="0" value="{{ s.record.revenue }}"></label>
+                <label>총 판매 수량<input name="sold_qty" type="number" min="0" value="{{ s.record.sold_qty }}"></label>
+                <label>반품 수량(취소+불량 합계)<input name="return_qty" type="number" min="0" value="{{ s.record.return_qty }}"></label>
+                <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">저장</button></div>
+              </form>
+            </details>
+            {% else %}
+            <span class="note" style="font-size:12px;white-space:nowrap">회차 여러 건</span>
+            {% endif %}
+          </td>
+        </tr>
         {% else %}
-        <tr><td colspan="7" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 데이터가 없습니다.</td></tr>
+        <tr><td colspan="8" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 데이터가 없습니다.</td></tr>
         {% endfor %}
       </tbody>
     </table>
