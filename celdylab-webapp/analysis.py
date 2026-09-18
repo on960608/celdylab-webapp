@@ -787,6 +787,177 @@ def fetch_naver_shopping_category_trend(category_code, category_name="", months=
     return points, None
 
 
+# ---------------------------------------------------------------------------
+# 쇼핑인사이트 - 분야 전체 클릭 추이 + 기기·성별·연령 비중
+#
+# 네이버 공식 API는 "그 조건(기기/성별/연령)에서의 상대적 관심도 흐름"만 알려줘요.
+# 예를 들어 PC만 따로 조회하면 PC 조회 안에서 제일 높은 달을 100으로 두고 계산한 값이라,
+# 모바일 조회 결과와 숫자를 그대로 비교할 수는 없어요(기준이 서로 달라요).
+# 그래서 기기·성별·연령 비중은 "구간 평균값끼리 비교한 추정 비율"이에요 — 데이터랩 화면에
+# 나오는 실제 클릭 비중과 정확히 같은 숫자는 아니라는 점을 화면에도 꼭 안내해요.
+# ---------------------------------------------------------------------------
+
+NAVER_SHOPPING_AGE_GROUPS = [
+    ("10대", ["2"]),           # 13~18세
+    ("20대", ["3", "4"]),      # 19~24, 25~29
+    ("30대", ["5", "6"]),      # 30~34, 35~39
+    ("40대", ["7", "8"]),      # 40~44, 45~49
+    ("50대", ["9", "10"]),     # 50~54, 55~59
+    ("60대 이상", ["11"]),      # 60세 이상
+]
+
+
+def _naver_shopping_category_call(category_code, category_name, start_date, end_date, time_unit, device="", gender="", ages=None):
+    import os
+    import json as _json
+
+    client_id = os.environ.get("NAVER_CLIENT_ID")
+    client_secret = os.environ.get("NAVER_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        return None, "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET이 설정되어 있지 않아요."
+
+    payload = {
+        "startDate": start_date,
+        "endDate": end_date,
+        "timeUnit": time_unit,
+        "category": [{"name": category_name or str(category_code), "param": [str(category_code)]}],
+        "device": device,
+        "gender": gender,
+        "ages": ages or [],
+    }
+    headers = {
+        "X-NCP-APIGW-API-KEY-ID": client_id,
+        "X-NCP-APIGW-API-KEY": client_secret,
+        "Content-Type": "application/json",
+    }
+    try:
+        import requests
+        resp = requests.post(
+            "https://naverapihub.apigw.ntruss.com/shopping/v1/categories",
+            headers=headers, data=_json.dumps(payload), timeout=10,
+        )
+    except Exception as e:
+        return None, f"네이버 쇼핑인사이트 요청 중 오류: {e}"
+
+    if resp.status_code != 200:
+        return None, f"네이버 쇼핑인사이트 오류(status {resp.status_code}): {resp.text[:200]}"
+
+    try:
+        data = resp.json()
+        result = data["results"][0]
+        points = [{"date": d["period"], "value": float(d["ratio"])} for d in result.get("data", [])]
+    except Exception as e:
+        return None, f"네이버 쇼핑인사이트 응답을 해석하지 못했어요: {e}"
+
+    return points, None
+
+
+def _avg_ratio(points):
+    if not points:
+        return 0.0
+    return sum(p["value"] for p in points) / len(points)
+
+
+def _shares_from_averages(pairs):
+    """pairs: [(label, 평균값), ...] -> 합이 100이 되도록 맞춘 비중(%) 리스트"""
+    total = sum(v for _, v in pairs)
+    if total <= 0:
+        n = len(pairs) or 1
+        return [{"label": label, "pct": round(100 / n, 1)} for label, _ in pairs]
+    return [{"label": label, "pct": round(v / total * 100, 1)} for label, v in pairs]
+
+
+def fetch_naver_shopping_insight(category_code, category_name="", months=1):
+    """
+    네이버 쇼핑인사이트 분야 화면(생활/건강 등)의 클릭량 추이 + 기기·성별·연령별 비중을
+    공식 API로 대신 가져와요. 반환값:
+    {
+      "trend": [{"date": "...", "value": ...}, ...] 또는 [],
+      "device": [{"label": "PC", "pct": ...}, {"label": "모바일", "pct": ...}] 또는 [],
+      "gender": [{"label": "여성", "pct": ...}, {"label": "남성", "pct": ...}] 또는 [],
+      "age": [{"label": "10대", "pct": ...}, ...] 또는 [],
+      "error": None 또는 안내 문구,
+    }
+    """
+    start_date, end_date = _naver_shopping_date_range(months)
+    time_unit = "date" if months <= 1 else "week"
+
+    trend, err = _naver_shopping_category_call(category_code, category_name, start_date, end_date, time_unit)
+    if err:
+        return {"trend": [], "device": [], "gender": [], "age": [], "error": err}
+
+    device_pairs = []
+    for label, code in (("PC", "pc"), ("모바일", "mo")):
+        pts, e = _naver_shopping_category_call(category_code, category_name, start_date, end_date, time_unit, device=code)
+        if e:
+            return {"trend": trend, "device": [], "gender": [], "age": [], "error": e}
+        device_pairs.append((label, _avg_ratio(pts)))
+
+    gender_pairs = []
+    for label, code in (("여성", "f"), ("남성", "m")):
+        pts, e = _naver_shopping_category_call(category_code, category_name, start_date, end_date, time_unit, gender=code)
+        if e:
+            return {"trend": trend, "device": _shares_from_averages(device_pairs), "gender": [], "age": [], "error": e}
+        gender_pairs.append((label, _avg_ratio(pts)))
+
+    age_pairs = []
+    for label, codes in NAVER_SHOPPING_AGE_GROUPS:
+        pts, e = _naver_shopping_category_call(category_code, category_name, start_date, end_date, time_unit, ages=codes)
+        if e:
+            return {
+                "trend": trend, "device": _shares_from_averages(device_pairs),
+                "gender": _shares_from_averages(gender_pairs), "age": [], "error": e,
+            }
+        age_pairs.append((label, _avg_ratio(pts)))
+
+    return {
+        "trend": trend,
+        "device": _shares_from_averages(device_pairs),
+        "gender": _shares_from_averages(gender_pairs),
+        "age": _shares_from_averages(age_pairs),
+        "error": None,
+    }
+
+
+_DONUT_COLORS = ["#7c6ff0", "#f2994a", "#27ae60", "#eb5757", "#2f80ed", "#bb6bd9", "#f2c94c"]
+
+
+def donut_chart(parts):
+    """
+    parts: [{"label":..., "pct":...}, ...] (합계 100 근처)
+    -> CSS conic-gradient 문자열과 색상이 붙은 리스트를 함께 돌려줘요.
+    """
+    segments = []
+    cursor = 0.0
+    stops = []
+    for i, p in enumerate(parts):
+        color = _DONUT_COLORS[i % len(_DONUT_COLORS)]
+        start = cursor
+        end = cursor + p["pct"]
+        stops.append(f"{color} {start:.2f}% {end:.2f}%")
+        segments.append({"label": p["label"], "pct": p["pct"], "color": color})
+        cursor = end
+    gradient = "conic-gradient(" + ", ".join(stops) + ")" if stops else "conic-gradient(#e7e8f5 0% 100%)"
+    return {"gradient": gradient, "segments": segments}
+
+
+def trend_sparkline_points(points, width=560, height=140, pad=8):
+    """points: [{"date":..., "value":...}, ...] -> SVG polyline용 'x,y x,y ...' 문자열"""
+    if not points:
+        return "", 0, 0
+    values = [p["value"] for p in points]
+    vmin, vmax = min(values), max(values)
+    span = (vmax - vmin) or 1.0
+    n = len(points)
+    step = (width - 2 * pad) / (n - 1) if n > 1 else 0
+    coords = []
+    for i, v in enumerate(values):
+        x = pad + step * i
+        y = height - pad - ((v - vmin) / span) * (height - 2 * pad)
+        coords.append(f"{x:.1f},{y:.1f}")
+    return " ".join(coords), width, height
+
+
 def compute_opportunity_score(trend_score, seeding_score, gongu_score, fit_score, weights):
     """
     weights: {"trend_weight","seeding_weight","gongu_weight","fit_weight"} (합계가 꼭 100일 필요는 없음 — 비율로 계산)

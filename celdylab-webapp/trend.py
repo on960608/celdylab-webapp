@@ -6,6 +6,7 @@ import db
 from analysis import (
     TREND_PLATFORMS, TREND_CATEGORIES, TREND_PLATFORM_LINKS, OPPORTUNITY_CATEGORIES,
     NAVER_SHOPPING_CATEGORIES, summarize_groupbuy_exposure,
+    fetch_naver_shopping_insight, donut_chart, trend_sparkline_points,
 )
 
 trend_bp = Blueprint("trend", __name__, url_prefix="/trend")
@@ -245,6 +246,34 @@ def groups_add_term(group_id):
 def groups_delete_term(term_id):
     db.delete_trend_group_term(term_id)
     return redirect(url_for("trend.groups_index"))
+
+
+# ---------------------------------------------------------------------------
+# 쇼핑인사이트 조회 — 네이버 공식 API로 분야 클릭 추이 + 기기·성별·연령 비중 확인
+# ---------------------------------------------------------------------------
+
+@trend_bp.route("/shopping-insight")
+def shopping_insight():
+    category_code = request.args.get("category") or NAVER_SHOPPING_CATEGORIES[8][1]  # 기본값: 생활/건강
+    months = request.args.get("months", type=int) or 1
+    if months not in (1, 3):
+        months = 1
+    category_name = next((name for name, code in NAVER_SHOPPING_CATEGORIES if code == category_code), category_code)
+
+    result = fetch_naver_shopping_insight(category_code, category_name, months)
+
+    trend_points, trend_w, trend_h = trend_sparkline_points(result["trend"])
+    device_chart = donut_chart(result["device"]) if result["device"] else None
+    gender_chart = donut_chart(result["gender"]) if result["gender"] else None
+    age_chart = donut_chart(result["age"]) if result["age"] else None
+
+    return render_template(
+        "trend_shopping_insight.html",
+        categories=NAVER_SHOPPING_CATEGORIES, category_code=category_code, category_name=category_name,
+        months=months, error=result["error"],
+        trend=result["trend"], trend_points=trend_points, trend_w=trend_w, trend_h=trend_h,
+        device_chart=device_chart, gender_chart=gender_chart, age_chart=age_chart,
+    )
 
 
 @trend_bp.route("/add", methods=["POST"])
