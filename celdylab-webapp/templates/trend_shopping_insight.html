@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}네이버 쇼핑인사이트 · 셀디랩 콘텐츠팀 웹앱{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">ANALYSIS · NAVER SHOPPING INSIGHT</div>
+  <h2>네이버 쇼핑인사이트</h2>
+  <p class="note" style="margin:0">네이버 공식 쇼핑인사이트 API로 분야별 클릭 추이와 기기·성별·연령 비중을 바로 확인해요. (실시간 데이터랩 화면을 그대로 가져오는 게 아니라, 공개된 API로 다시 계산한 값이에요 — 아래 안내를 꼭 확인해 주세요)</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <form method="get" action="{{ url_for('trend.shopping_insight') }}" class="ins-form-grid" style="align-items:end">
+    <label>분야
+      <select name="category" onchange="this.form.submit()">
+        {% for name, code in categories %}
+        <option value="{{ code }}" {{ 'selected' if code==category_code }}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">기간</div>
+      <div class="tab-toggle">
+        <button type="submit" name="months" value="1" class="{{ 'is-active' if months==1 }}">1개월</button>
+        <button type="submit" name="months" value="3" class="{{ 'is-active' if months==3 }}">3개월</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% if error %}
+<div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+  <p class="note" style="margin:0">⚠ {{ error }}</p>
+  <p class="note" style="margin:6px 0 0">Railway 환경변수에 <code>NAVER_CLIENT_ID</code> / <code>NAVER_CLIENT_SECRET</code>이 등록되어 있는지 확인해 주세요. (이미 다른 트렌드 분석 기능에서 쓰고 있다면 자동으로 같이 적용돼요)</p>
+</div>
+{% endif %}
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>{{ category_name }} · 클릭량 추이</h3><div class="unit">최근 {{ months }}개월간 클릭 관심도 흐름이에요 (구간 내 최고점을 100으로 둔 상대지수).</div></div></div>
+  {% if trend_points %}
+  <svg viewBox="0 0 {{ trend_w }} {{ trend_h }}" width="100%" height="140" preserveAspectRatio="none">
+    <polyline points="{{ trend_points }}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+  </svg>
+  {% else %}
+  <p class="note" style="margin:0">표시할 데이터가 없어요.</p>
+  {% endif %}
+</div>
+
+<div class="gp-forecast-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
+  <div class="chart-card">
+    <div class="chart-card-head"><div><h3>기기별 비중</h3><div class="unit">PC / 모바일 추정 비중</div></div></div>
+    {% if device_chart %}
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <div style="width:120px;height:120px;border-radius:50%;background:{{ device_chart.gradient }};flex-shrink:0"></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        {% for seg in device_chart.segments %}
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="width:10px;height:10px;border-radius:50%;background:{{ seg.color }};display:inline-block;flex-shrink:0"></span>
+          <span>{{ seg.label }}</span><b style="margin-left:auto">{{ seg.pct }}%</b>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <p class="note" style="margin:0">표시할 데이터가 없어요.</p>
+    {% endif %}
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-card-head"><div><h3>성별 비중</h3><div class="unit">여성 / 남성 추정 비중</div></div></div>
+    {% if gender_chart %}
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <div style="width:120px;height:120px;border-radius:50%;background:{{ gender_chart.gradient }};flex-shrink:0"></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        {% for seg in gender_chart.segments %}
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="width:10px;height:10px;border-radius:50%;background:{{ seg.color }};display:inline-block;flex-shrink:0"></span>
+          <span>{{ seg.label }}</span><b style="margin-left:auto">{{ seg.pct }}%</b>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <p class="note" style="margin:0">표시할 데이터가 없어요.</p>
+    {% endif %}
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-card-head"><div><h3>연령별 비중</h3><div class="unit">10대~60대 이상 추정 비중</div></div></div>
+    {% if age_chart %}
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <div style="width:120px;height:120px;border-radius:50%;background:{{ age_chart.gradient }};flex-shrink:0"></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        {% for seg in age_chart.segments %}
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="width:10px;height:10px;border-radius:50%;background:{{ seg.color }};display:inline-block;flex-shrink:0"></span>
+          <span>{{ seg.label }}</span><b style="margin-left:auto">{{ seg.pct }}%</b>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <p class="note" style="margin:0">표시할 데이터가 없어요.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="chart-card" style="margin-top:16px">
+  <p class="note" style="margin:0">
+    ⓘ 기기·성별·연령 비중은 네이버 공식 API로 각각 따로 조회한 값을 평균 내어 다시 100%로 맞춘 <b>추정치</b>예요. 데이터랩 화면에 나오는 실제 클릭 비중과 완전히 같은 숫자는 아닐 수 있어요.<br>
+    ⓘ 인기검색어 TOP100 목록은 공식 API로 제공되지 않아서 이 화면에는 포함되지 않았어요. 필요하시면 네이버 데이터랩 사이트에서 직접 확인해 주세요.
+  </p>
+</div>
+{% endblock %}
