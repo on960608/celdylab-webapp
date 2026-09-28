@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 
 import db
 from analysis import gongu_net_sold, gongu_return_pct, gongu_tier, TIER_ORDER, won, pct, manwon, BRANDS
+from gongu_forecast import bands, per_10k, round_half_up
 
 gongu_bp = Blueprint("gongu", __name__, url_prefix="/gongu-perf")
 
@@ -47,16 +48,18 @@ def index():
     records = [dict(r) for r in db.list_gongu_records(brand, month)]
 
     n = len(records)
-    total_followers = sum(r["followers"] for r in records)
     total_revenue = sum(r["revenue"] for r in records)
     avg_revenue = total_revenue / n if n else 0
-    per_follower = (total_revenue / total_followers) if total_followers else 0
     # 팔로워 기준 매출 벤치마크 (1만 / 5만 / 10만 / 30만명 가정 시 예상 매출)
+    # 기록별 "1만 명당 매출"의 중앙값을 쓴다 (매출 큰 기록 한 건에 끌려가지 않도록,
+    # 합계 비율 대신 백분위 방식으로 바꿈 — 작업지시서 01의 1단계).
+    revenue_rates = [per_10k(r["revenue"], r["followers"]) for r in records if r["followers"]]
+    median_rate_per_10k = bands(revenue_rates)["mid"] if revenue_rates else 0
     follower_benchmarks = [
-        {"label": "팔로워 1만명 기준", "revenue": per_follower * 10_000},
-        {"label": "팔로워 5만명 기준", "revenue": per_follower * 50_000},
-        {"label": "팔로워 10만명 기준", "revenue": per_follower * 100_000},
-        {"label": "팔로워 30만명 기준", "revenue": per_follower * 300_000},
+        {"label": "팔로워 1만명 기준", "revenue": median_rate_per_10k * 1},
+        {"label": "팔로워 5만명 기준", "revenue": median_rate_per_10k * 5},
+        {"label": "팔로워 10만명 기준", "revenue": median_rate_per_10k * 10},
+        {"label": "팔로워 30만명 기준", "revenue": median_rate_per_10k * 30},
     ]
     avg_return = sum(gongu_return_pct(r) for r in records) / n if n else 0
 
@@ -113,6 +116,9 @@ def index():
         })
 
     # 제품별 평균
+    # "1만 명당 판매량"을 보수(25%)/보통(중앙값)/낙관(75%) 백분위로 계산한다 (작업지시서 01의 1단계).
+    # 평균 대신 백분위를 쓰는 이유: 기록 하나가 유독 크면(예: 팔로워 73만에 매출 2.36억) 평균이
+    # 그 기록 쪽으로 크게 끌려가서 다른 셀러들의 실제 성과를 왜곡하기 때문.
     product_groups = {}
     for r in records:
         p = r["product"] or "미지정"
@@ -121,11 +127,14 @@ def index():
     for p, arr in product_groups.items():
         avg_return = sum(gongu_return_pct(x) for x in arr) / len(arr)
         risk = "위험" if avg_return >= 20 else ("주의" if avg_return >= 10 else "양호")
+        qty_rates = [per_10k(gongu_net_sold(x), x["followers"]) for x in arr if x["followers"]]
+        qty_bands = bands(qty_rates) if qty_rates else {"low": 0, "mid": 0, "high": 0}
         products.append({
             "product": p, "count": len(arr),
             "avg_revenue": sum(x["revenue"] for x in arr) / len(arr),
-            "avg_sold": sum(gongu_net_sold(x) for x in arr) / len(arr),
+            "per10k_low": qty_bands["low"], "per10k_mid": qty_bands["mid"], "per10k_high": qty_bands["high"],
             "avg_return": avg_return, "risk": risk,
+            "low_sample": len(arr) < 3,
         })
 
     # 신규 공구 예상 계산기 (같은 팔로워 구간 우선 비교)
