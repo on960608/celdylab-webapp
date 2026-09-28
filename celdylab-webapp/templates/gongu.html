@@ -168,11 +168,12 @@
 </div>
 
 <div class="chart-card">
-  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">PRODUCT BREAKDOWN</div><h3>제품별 평균</h3><div class="unit">반품율이 높은 제품은 과발주·악성재고 위험이 있어요.</div></div></div>
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">PRODUCT BREAKDOWN</div><h3>제품별 평균</h3><div class="unit">반품율이 높은 제품은 과발주·악성재고 위험이 있어요. 1만 명당 판매량은 평균이 아니라 중앙값 기준이라 매출이 유독 큰 기록 한 건에 끌려가지 않아요.</div></div></div>
   {% for p in products %}
     <div class="gp-block">
-      <b>{{ p.product }} <span class="ins-badge {{ 'fail' if p.risk=='위험' else ('warn' if p.risk=='주의' else 'pass') }}">반품율 {{ p.risk }}</span></b>
-      <p>등록 {{ p.count }}건 · 평균 매출 {{ won(p.avg_revenue) }} · 평균 판매 {{ '{:,}'.format(p.avg_sold|round|int) }}개 · 평균 반품율 {{ pct(p.avg_return) }}</p>
+      <b>{{ p.product }} <span class="ins-badge {{ 'fail' if p.risk=='위험' else ('warn' if p.risk=='주의' else 'pass') }}">반품율 {{ p.risk }}</span>{% if p.low_sample %} <span class="ins-badge warn">참고용 · 기록 {{ p.count }}건</span>{% endif %}</b>
+      <p>등록 {{ p.count }}건 · 평균 매출 {{ won(p.avg_revenue) }} · 평균 반품율 {{ pct(p.avg_return) }}</p>
+      <p>1만 명당 판매량 — 보수 {{ '%.2f'|format(p.per10k_low) }}개 · 보통 {{ '%.2f'|format(p.per10k_mid) }}개 · 낙관 {{ '%.2f'|format(p.per10k_high) }}개</p>
     </div>
   {% else %}
     <p class="note">데이터를 추가하면 제품별 평균이 표시됩니다.</p>
