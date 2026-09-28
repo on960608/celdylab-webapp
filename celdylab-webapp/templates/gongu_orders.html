@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}주문 엑셀 올리기 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">ANALYSIS · ORDER UPLOAD</div>
+  <h2>주문 엑셀 올리기</h2>
+  <p>{{ record.month or '-' }} · {{ record.product or '-' }} · {{ record.seller or '-' }} 공구 기록에 옵션별 판매 내역을 채워요. 고객 이름·연락처·주소 열은 읽지 않아요.</p>
+</div>
+
+{% if not preview %}
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">STEP 1</div><h3>파일 선택</h3></div></div>
+  <form method="post" action="{{ url_for('gongu.orders_preview', record_id=record.id) }}" enctype="multipart/form-data" class="ins-form-grid" style="margin-top:10px">
+    <label class="ins-wide">주문 엑셀 파일 (xlsx, csv)<input type="file" name="order_file" accept=".xlsx,.csv" required></label>
+    <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">불러오기</button></div>
+  </form>
+</div>
+
+{% if existing %}
+<div class="chart-card">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">CURRENT</div><h3>지금 저장된 옵션별 내역</h3></div></div>
+  <table class="data-table">
+    <thead><tr><th>옵션</th><th>주문 수량</th><th>반품 수량</th><th>매출</th></tr></thead>
+    <tbody>
+      {% for o in existing %}
+      <tr><td>{{ o.option_name }}</td><td>{{ '{:,}'.format(o.qty) }}</td><td>{{ '{:,}'.format(o.return_qty) }}</td><td>{{ won(o.revenue) }}</td></tr>
+      {% else %}
+      <tr><td colspan="4" style="text-align:center;color:var(--muted2);padding:16px 0">아직 올린 주문 엑셀이 없어요.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endif %}
+
+{% if preview %}
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">STEP 2</div><h3>옵션별 합계 미리보기</h3>
+    <div class="unit">저장을 누르기 전까지는 아무것도 반영되지 않아요. 업로드한 파일: {{ preview.filename }}</div></div></div>
+
+  {% if preview.already_uploaded %}
+  <p class="note" style="color:var(--warn, #c78a00)">이 파일은 이 공구 기록에 이미 한 번 올렸어요. 다시 저장하면 이전 옵션별 내역을 덮어써요.</p>
+  {% endif %}
+  {% if preview.unmatched_count %}
+  <p class="note">처음 보는 옵션 글자가 {{ preview.unmatched_count }}개 있어요. 오른쪽에서 표준 옵션을 선택해 연결해 주세요 — 한 번 연결하면 다음부터는 자동으로 인식돼요.</p>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('gongu.orders_confirm', record_id=record.id) }}">
+    <input type="hidden" name="row_count" value="{{ preview.rows|length }}">
+    <input type="hidden" name="filename" value="{{ preview.filename }}">
+    <input type="hidden" name="fingerprint" value="{{ preview.fingerprint }}">
+    <table class="data-table">
+      <thead><tr><th>엑셀 속 옵션 글자</th><th>주문 수량</th><th>반품 수량</th><th>표준 옵션</th></tr></thead>
+      <tbody>
+        {% for r in preview.rows %}
+        <tr>
+          <td style="max-width:340px;word-break:break-word">{{ r.raw }}
+            <input type="hidden" name="row_{{ loop.index0 }}_raw" value="{{ r.raw }}">
+          </td>
+          <td>{{ '{:,}'.format(r.qty) }}
+            <input type="hidden" name="row_{{ loop.index0 }}_qty" value="{{ r.qty }}">
+            <input type="hidden" name="row_{{ loop.index0 }}_return_qty" value="{{ r.return_qty }}">
+          </td>
+          <td>{{ '{:,}'.format(r.return_qty) }}</td>
+          <td>
+            {% if r.option_name %}
+              <span class="ins-badge pass">연결됨</span> {{ r.option_name }}
+              <input type="hidden" name="row_{{ loop.index0 }}_option_name" value="{{ r.option_name }}">
+            {% else %}
+              <span class="ins-badge warn">처음 봐</span>
+              <select name="row_{{ loop.index0 }}_option_name">
+                <option value="">표준 옵션 선택</option>
+                {% for o in all_options %}
+                <option value="{{ o.option_name }}">{{ o.product }} · {{ o.option_name }}</option>
+                {% endfor %}
+              </select>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">
+      <span class="note">전체 주문 수량 {{ '{:,}'.format(preview.total_qty) }}개 · 반품 {{ '{:,}'.format(preview.total_return_qty) }}개</span>
+      <div>
+        <a class="refresh-btn" style="display:inline-block;margin-right:8px" href="{{ url_for('gongu.orders_form', record_id=record.id) }}">취소</a>
+        <button class="refresh-btn" type="submit">저장</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

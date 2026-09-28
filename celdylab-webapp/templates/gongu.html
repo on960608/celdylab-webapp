@@ -55,7 +55,10 @@
               <td>{{ manwon(r.followers) }}</td><td>{{ won(r.revenue) }}</td><td>{{ '{:,}'.format(net_sold(r)) }}</td>
               <td>{{ pct(return_pct(r)) }}</td>
               <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기</a>{% else %}-{% endif %}</td>
-              <td><form method="post" action="{{ url_for('gongu.delete', record_id=r.id) }}"><button class="ins-del-btn" type="submit">삭제</button></form></td>
+              <td style="white-space:nowrap">
+                <a class="refresh-btn" style="display:inline-block;margin-right:4px" href="{{ url_for('gongu.orders_form', record_id=r.id) }}">주문 엑셀 올리기</a>
+                <form method="post" action="{{ url_for('gongu.delete', record_id=r.id) }}" style="display:inline"><button class="ins-del-btn" type="submit">삭제</button></form>
+              </td>
             </tr>
             {% else %}
             <tr><td colspan="10" style="text-align:center;color:var(--muted2);padding:20px 0">등록된 데이터가 없습니다.</td></tr>
