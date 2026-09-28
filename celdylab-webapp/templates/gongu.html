@@ -170,6 +170,12 @@
   </div>
 </div>
 
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">NEW · QUANTITY CALCULATOR</div><h3>옵션 수량 계산기</h3><div class="unit">제품·옵션별로 몇 개를 준비해야 하는지 보수/보통/낙관으로 계산해요. (작업지시서 01의 3단계)</div></div>
+    <a class="refresh-btn" href="{{ url_for('gongu.calculator_form') }}">계산하러 가기</a>
+  </div>
+</div>
+
 <div class="chart-card">
   <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">PRODUCT BREAKDOWN</div><h3>제품별 평균</h3><div class="unit">반품율이 높은 제품은 과발주·악성재고 위험이 있어요. 1만 명당 판매량은 평균이 아니라 중앙값 기준이라 매출이 유독 큰 기록 한 건에 끌려가지 않아요.</div></div></div>
   {% for p in products %}

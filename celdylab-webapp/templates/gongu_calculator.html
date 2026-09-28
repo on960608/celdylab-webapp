@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}옵션 수량 계산기 · 셀디랩 콘텐츠팀{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">ANALYSIS · QUANTITY CALCULATOR</div>
+  <h2>옵션 수량 계산기</h2>
+  <p>팔로워 수와 제품을 넣으면 옵션별로 몇 개를 준비해야 하는지 계산해요. 셀러 개인 실적이 아니라 그 제품(또는 브랜드)의 과거 기록을 기준으로 보수·보통·낙관 범위로 보여줘요.</p>
+</div>
+
+{% if step == 'form' %}
+<div class="chart-card">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">STEP 1</div><h3>제품과 팔로워 수 입력</h3></div></div>
+  <form method="post" action="{{ url_for('gongu.calculator_options') }}" class="ins-form-grid" style="margin-top:10px">
+    <label>브랜드
+      <select name="brand" required>
+        <option value="">선택해주세요</option>
+        {% for b in brands %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>제품 (목록에서 선택)
+      <select name="product_pick">
+        <option value="">— 아래에 새 제품명 직접 입력 —</option>
+        {% for b, items in products|groupby('brand') %}
+        <optgroup label="{{ b }}">
+          {% for p in items %}<option value="{{ p.product }}">{{ p.product }}</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="ins-wide">목록에 없는 새 제품이면 여기에 이름 입력<input name="product_custom" placeholder="예: 새 세정서버 미니"></label>
+    <label>예상 셀러 팔로워 수<input name="followers" type="number" min="1" required placeholder="500000"></label>
+    <label>요청 수량 여유분(%)<input name="margin" type="number" min="0" value="20"></label>
+    <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">다음 · 옵션 확인</button></div>
+  </form>
+</div>
+{% endif %}
+
+{% if step == 'options' %}
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">STEP 2</div><h3>옵션 비중 확인</h3>
+    <div class="unit">{{ brand }} · {{ product }} · 팔로워 {{ '{:,}'.format(followers|int) }}명</div></div></div>
+  <p class="note">{{ note }}</p>
+
+  <form method="post" action="{{ url_for('gongu.calculator_options') }}" style="margin-bottom:14px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="brand" value="{{ brand }}">
+    <input type="hidden" name="product" value="{{ product }}">
+    <input type="hidden" name="followers" value="{{ followers }}">
+    <input type="hidden" name="margin_pct" value="{{ margin_pct }}">
+    <label style="min-width:220px">비슷한 제품 비율 불러오기
+      <select name="borrow_from">
+        <option value="">제품 선택</option>
+        {% for p in similar_products %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="refresh-btn" type="submit">불러오기</button>
+  </form>
+
+  <form method="post" action="{{ url_for('gongu.calculator_result') }}">
+    <input type="hidden" name="brand" value="{{ brand }}">
+    <input type="hidden" name="product" value="{{ product }}">
+    <input type="hidden" name="followers" value="{{ followers }}">
+    <input type="hidden" name="margin_pct" value="{{ margin_pct }}">
+    <table class="data-table">
+      <thead><tr><th>옵션 이름</th><th>비중(%)</th><th>구성 수량</th><th>판매가(원)</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><input name="row_{{ loop.index0 }}_option_name" value="{{ r.option_name }}" placeholder="예: 1+1" style="width:100%"></td>
+          <td><input name="row_{{ loop.index0 }}_share_pct" value="{{ r.share_pct }}" type="number" step="0.1" min="0" max="100" style="width:90px"></td>
+          <td><input name="row_{{ loop.index0 }}_pack_qty" value="{{ r.pack_qty }}" type="number" min="1" style="width:90px"></td>
+          <td><input name="row_{{ loop.index0 }}_price" value="{{ r.price }}" type="number" min="0" style="width:120px"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="note" style="margin-top:8px">비중(%)의 합이 100이 되도록 맞춰 주세요. 쓰지 않는 줄은 비워두면 돼요.</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+      <a class="refresh-btn" href="{{ url_for('gongu.calculator_form') }}">처음부터 다시</a>
+      <button class="refresh-btn" type="submit">계산하기</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if step == 'result' %}
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">RESULT</div><h3>{{ brand }} · {{ product }} · 팔로워 {{ '{:,}'.format(followers|int) }}명</h3>
+    <div class="unit">근거: {{ result.basis }}{% if result.method == 'revenue' %} (처음 하는 제품이라 매출 기준으로 수량을 환산했어요){% endif %}</div></div></div>
+  {% if result.warning %}<p class="note" style="color:var(--warn, #c78a00)">{{ result.warning }}</p>{% endif %}
+
+  <table class="data-table">
+    <thead><tr><th>옵션</th><th>비중</th><th>보수</th><th>보통</th><th>낙관</th><th>추천 요청 수량</th><th>실제 개수</th></tr></thead>
+    <tbody>
+      {% for r in result.rows %}
+      <tr>
+        <td>{{ r.option }}</td>
+        <td>{{ (r.share * 100)|round(1) }}%</td>
+        <td>{{ '{:,}'.format(r.low) }}개</td>
+        <td>{{ '{:,}'.format(r.mid) }}개</td>
+        <td>{{ '{:,}'.format(r.high) }}개</td>
+        <td><b>{{ '{:,}'.format(r.request) }}개</b></td>
+        <td>{{ '{:,}'.format(r.units) }}개</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="stat-row" style="margin-top:16px">
+    <div class="stat-tile"><span class="label">여유분 {{ margin_pct }}% 반영 · 추천 요청 수량 합계</span><strong>{{ '{:,}'.format(result.request_total) }}개</strong></div>
+    <div class="stat-tile"><span class="label">실제 개수 합계</span><strong>{{ '{:,}'.format(result.units_total) }}개</strong></div>
+    <div class="stat-tile"><span class="label">보수 총수량 / 예상 매출</span><strong>{{ '{:,}'.format(result.totals.low) }}개 · {{ won(result.revenue.low) }}</strong></div>
+    <div class="stat-tile"><span class="label">보통 총수량 / 예상 매출</span><strong>{{ '{:,}'.format(result.totals.mid) }}개 · {{ won(result.revenue.mid) }}</strong></div>
+    <div class="stat-tile"><span class="label">낙관 총수량 / 예상 매출</span><strong>{{ '{:,}'.format(result.totals.high) }}개 · {{ won(result.revenue.high) }}</strong></div>
+  </div>
+
+  <p class="note" style="margin-top:14px"><a class="refresh-btn" href="{{ url_for('gongu.calculator_form') }}">다른 조건으로 다시 계산하기</a></p>
+</div>
+{% endif %}
+{% endblock %}
