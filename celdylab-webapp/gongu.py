@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 
 import db
 from analysis import gongu_net_sold, gongu_return_pct, gongu_tier, TIER_ORDER, won, pct, manwon, BRANDS
-from gongu_forecast import bands, per_10k, round_half_up
+from gongu_forecast import bands, per_10k, round_half_up, normalize, GonguRecord, Option, forecast
 from gongu_order_parser import parse_courier_orders
 from order_excel import file_fingerprint
 
@@ -355,3 +355,159 @@ def orders_confirm(record_id):
 
     flash(f"주문 엑셀을 반영했어요. 판매 수량 {total_qty:,}개 · 매출 {total_revenue:,}원 · 반품 {total_return:,}개")
     return redirect(url_for("gongu.index", brand=record["brand"] or None))
+
+
+# ---------- 옵션 수량 계산기 (작업지시서 01의 3단계) ----------
+# gongu_forecast.forecast()는 이미 만들어져 테스트까지 끝난 함수라 그대로 쓴다.
+# 이 화면은 그 함수에 넣을 입력(제품의 옵션 목록 + 비중, 팔로워 수, 여유분)을 모으고,
+# 나온 결과를 표로 보여주는 역할만 한다.
+
+MANUAL_ROWS = 8  # 옵션을 직접 입력할 때 보여줄 빈 줄 수
+
+
+def _build_forecast_records():
+    rows = db.list_gongu_records()
+    return [
+        GonguRecord(r["product"], r["brand"], r["followers"], r["revenue"], gongu_net_sold(r))
+        for r in rows
+    ]
+
+
+def _options_with_product_list():
+    """옵션이 등록된 제품 이름 목록 (비슷한 제품 비율 불러오기용)."""
+    return sorted({o["product"] for o in db.list_product_options()})
+
+
+def _rows_for_product(product):
+    """그 제품의 표준 옵션과, 지금까지 판매 비율로 채운 옵션 줄 목록을 돌려준다.
+    등록된 옵션이 없으면 빈 줄만 있는 목록을 돌려준다."""
+    all_opts = db.list_product_options()
+    matched = [o for o in all_opts if normalize(o["product"]) == normalize(product)]
+    if not matched:
+        return [{"option_name": "", "share_pct": "", "pack_qty": "", "price": ""} for _ in range(MANUAL_ROWS)], False
+
+    qty_hist = db.option_qty_by_product(product)
+    total_hist = sum(qty_hist.values())
+    rows = []
+    for o in matched:
+        if total_hist > 0:
+            share_pct = round(qty_hist.get(o["option_name"], 0) / total_hist * 100, 1)
+        else:
+            share_pct = round(100 / len(matched), 1)
+        rows.append({
+            "option_name": o["option_name"], "share_pct": share_pct,
+            "pack_qty": o["pack_qty"], "price": o["price"],
+        })
+    while len(rows) < MANUAL_ROWS:
+        rows.append({"option_name": "", "share_pct": "", "pack_qty": "", "price": ""})
+    return rows[:MANUAL_ROWS], (total_hist > 0)
+
+
+@gongu_bp.route("/calculator", methods=["GET"])
+def calculator_form():
+    products = db.list_all_products()
+    return render_template(
+        "gongu_calculator.html", step="form", brands=BRANDS, products=products,
+    )
+
+
+@gongu_bp.route("/calculator/options", methods=["POST"])
+def calculator_options():
+    f = request.form
+    borrow_from = (f.get("borrow_from") or "").strip()
+
+    if borrow_from:
+        # 이미 옵션 단계에 있는 상태에서 "비슷한 제품 비율 불러오기"를 누른 경우.
+        # 브랜드/제품/팔로워/여유분은 원래 새로 계산하려던 값 그대로 유지한다.
+        brand = f.get("brand", "").strip()
+        product = f.get("product", "").strip()
+        followers = f.get("followers", "").strip()
+        margin_pct = f.get("margin_pct", "20").strip()
+        rows, has_history = _rows_for_product(borrow_from)
+        note = f"'{borrow_from}' 옵션과 판매 비율을 불러왔어요. 판매가·구성 수량을 이 제품에 맞게 고쳐 주세요."
+    else:
+        brand = f.get("brand", "").strip()
+        product = (f.get("product_custom") or "").strip() or f.get("product_pick", "").strip()
+        followers = f.get("followers", "").strip()
+        margin_pct = f.get("margin", "20").strip()
+        if not brand or not product or not followers:
+            flash("브랜드, 제품, 팔로워 수를 모두 입력해 주세요.")
+            return redirect(url_for("gongu.calculator_form"))
+        rows, has_history = _rows_for_product(product)
+        if not rows or not rows[0]["option_name"]:
+            note = f"'{product}'은(는) 등록된 표준 옵션이 없는 제품이에요. 아래에 옵션을 직접 입력해 주세요. 비슷한 제품의 비율을 불러와서 시작할 수도 있어요."
+        elif has_history:
+            note = f"'{product}' 표준 옵션과 지금까지의 판매 비율로 채웠어요. 필요하면 고쳐서 계산하세요."
+        else:
+            note = f"'{product}' 표준 옵션이에요. 아직 판매 기록이 없어서 옵션 수만큼 똑같이 나눴어요 — 직접 고쳐 주세요."
+
+    return render_template(
+        "gongu_calculator.html", step="options", brand=brand, product=product,
+        followers=followers, margin_pct=margin_pct, rows=rows, note=note,
+        similar_products=_options_with_product_list(),
+    )
+
+
+@gongu_bp.route("/calculator/result", methods=["POST"])
+def calculator_result():
+    f = request.form
+    brand = f.get("brand", "").strip()
+    product = f.get("product", "").strip()
+    followers = int(f.get("followers") or 0)
+    margin_pct = f.get("margin_pct", "20").strip()
+    try:
+        margin = float(margin_pct) / 100
+    except ValueError:
+        margin = 0.2
+
+    rows_in = []
+    for i in range(MANUAL_ROWS):
+        name = (f.get(f"row_{i}_option_name") or "").strip()
+        share_pct = (f.get(f"row_{i}_share_pct") or "").strip()
+        pack_qty = (f.get(f"row_{i}_pack_qty") or "").strip()
+        price = (f.get(f"row_{i}_price") or "").strip()
+        if not name or not share_pct:
+            continue
+        rows_in.append({"option_name": name, "share_pct": share_pct, "pack_qty": pack_qty, "price": price})
+
+    def _bounce_back(message):
+        flash(message)
+        return render_template(
+            "gongu_calculator.html", step="options", brand=brand, product=product,
+            followers=followers, margin_pct=margin_pct,
+            rows=(rows_in + [{"option_name": "", "share_pct": "", "pack_qty": "", "price": ""}
+                              for _ in range(MANUAL_ROWS - len(rows_in))])[:MANUAL_ROWS],
+            note="아래 내용을 확인해서 다시 시도해 주세요.",
+            similar_products=_options_with_product_list(),
+        )
+
+    if not brand or not product or followers <= 0:
+        return _bounce_back("브랜드, 제품, 팔로워 수를 다시 확인해 주세요.")
+    if not rows_in:
+        return _bounce_back("옵션을 하나 이상 입력해 주세요.")
+
+    share_sum = 0.0
+    try:
+        options = []
+        for r in rows_in:
+            share = float(r["share_pct"]) / 100
+            pack_qty = int(r["pack_qty"] or 1)
+            price = int(r["price"] or 0)
+            share_sum += share
+            options.append(Option(r["option_name"], share, pack_qty, price))
+    except ValueError:
+        return _bounce_back("비중·구성 수량·판매가는 숫자로 입력해 주세요.")
+
+    if abs(share_sum - 1) > 0.01:
+        return _bounce_back(f"옵션 비중의 합이 100%가 아니에요 (지금 {share_sum * 100:.1f}%). 합이 100%가 되도록 고쳐 주세요.")
+
+    records = _build_forecast_records()
+    try:
+        result = forecast(records, product, brand, followers, options, margin=margin)
+    except ValueError as e:
+        return _bounce_back(str(e))
+
+    return render_template(
+        "gongu_calculator.html", step="result", brand=brand, product=product,
+        followers=followers, margin_pct=margin_pct, result=result, won=won,
+    )

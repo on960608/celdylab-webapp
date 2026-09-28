@@ -455,6 +455,42 @@ def record_order_upload(record_id, filename, fingerprint, uploaded_by):
     conn.close()
 
 
+# ---------- 옵션 수량 계산기 (작업지시서 01의 3단계) ----------
+
+def list_all_products():
+    """자료실(archive_links)에 등록된 자사 제품 전체를 [{"brand","product"}]로 돌려준다.
+    계산기의 "제품 선택" 목록에 쓴다."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT DISTINCT brand, product FROM archive_links WHERE product != '' ORDER BY brand, product"
+    ).fetchall()
+    conn.close()
+    return [{"brand": r["brand"], "product": r["product"]} for r in rows]
+
+
+def option_qty_by_product(product):
+    """그 제품의 지금까지 쌓인 옵션별 판매 수량(반품 뺀 순수 판매)을 더한다.
+    {"표준 옵션명": 순수량, ...}. 계산기에서 옵션 비중을 자동으로 채울 때 쓴다.
+    기록이 없으면 빈 딕셔너리를 돌려준다. product 이름은 normalize()로 비교해서
+    띄어쓰기가 달라도(예: "세정서버 세트" / "세정서버세트") 같은 제품으로 묶는다."""
+    conn = get_conn()
+    target = _normalize(product)
+    rows = conn.execute(
+        """SELECT gr.product AS product, gro.option_name AS option_name,
+                  gro.qty AS qty, gro.return_qty AS return_qty
+           FROM gongu_record_options gro
+           JOIN gongu_records gr ON gr.id = gro.record_id"""
+    ).fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        if _normalize(r["product"]) != target:
+            continue
+        net = max(0, (r["qty"] or 0) - (r["return_qty"] or 0))
+        result[r["option_name"]] = result.get(r["option_name"], 0) + net
+    return result
+
+
 # ---------- 협찬 인원 리스트업 / 컨택관리 ----------
 
 def list_candidates():
