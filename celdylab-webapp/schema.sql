@@ -224,6 +224,32 @@ CREATE TABLE IF NOT EXISTS trend_keyword_group_terms (
   term TEXT NOT NULL
 );
 
+-- 네이버 데이터랩 쇼핑인사이트 인기검색어 TOP100 (비공식 방식, 작업지시서 02).
+-- 조합(collected_date, category_cid, gender, age)마다 그날 순위를 통째로 저장한다.
+CREATE TABLE IF NOT EXISTS naver_rank_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  collected_date TEXT NOT NULL,
+  category_cid TEXT NOT NULL,
+  category_name TEXT NOT NULL,
+  gender TEXT NOT NULL DEFAULT '',
+  age TEXT NOT NULL DEFAULT '',
+  period_range TEXT NOT NULL DEFAULT '',
+  rank INTEGER NOT NULL,
+  keyword TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_naver_rank_lookup
+  ON naver_rank_entries (category_cid, gender, age, collected_date);
+
+-- 순위 수집 시도 기록(성공/실패) — 화면의 "최근 수집 실패" 안내에 씀
+CREATE TABLE IF NOT EXISTS naver_rank_collect_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  attempted_at TEXT NOT NULL,
+  ok INTEGER NOT NULL,
+  message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
 -- 검색 트렌드 원본 — 소스별로 절대 섞지 않고 그대로 보존 (source: 'naver_search' | 'naver_shopping' | 'google')
 CREATE TABLE IF NOT EXISTS trend_search_raw (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

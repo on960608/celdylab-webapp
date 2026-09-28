@@ -1,8 +1,10 @@
 import os
+from datetime import date, timedelta
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
 
 import db
+import naver_rank
 from analysis import (
     TREND_PLATFORMS, TREND_CATEGORIES, TREND_PLATFORM_LINKS, OPPORTUNITY_CATEGORIES,
     NAVER_SHOPPING_CATEGORIES, summarize_groupbuy_exposure,
@@ -10,6 +12,12 @@ from analysis import (
 )
 
 trend_bp = Blueprint("trend", __name__, url_prefix="/trend")
+
+# 인기검색어 TOP100(비공식) 전용 분야 목록 — 위 NAVER_SHOPPING_CATEGORIES(추이 차트용, 공식 API)와는
+# 다른 목록이에요. 셀디랩 제품과 관련 있는 분야만 추려서 naver_rank.py에 이미 정해져 있어요.
+NAVER_RANK_CATEGORIES = list(naver_rank.CATEGORIES.items())
+NAVER_RANK_DEFAULT_CID = naver_rank.CATEGORIES["생활/건강"]  # 지인이 "생활/건강 전체 하나만" 매일 모으기로 정함
+NAVER_RANK_AGE_OPTIONS = naver_rank.AGES
 
 
 @trend_bp.before_request
@@ -267,13 +275,127 @@ def shopping_insight():
     gender_chart = donut_chart(result["gender"]) if result["gender"] else None
     age_chart = donut_chart(result["age"]) if result["age"] else None
 
+    # ---- 인기검색어 TOP100 (비공식, 작업지시서 02) ----
+    rank_cid = request.args.get("rank_cid") or NAVER_RANK_DEFAULT_CID
+    if rank_cid not in dict(NAVER_RANK_CATEGORIES).values():
+        rank_cid = NAVER_RANK_DEFAULT_CID
+    rank_category_name = next((n for n, c in NAVER_RANK_CATEGORIES if c == rank_cid), rank_cid)
+    rank_gender = request.args.get("rank_gender") or ""
+    if rank_gender not in ("", "f", "m"):
+        rank_gender = ""
+    rank_ages = [a for a in request.args.getlist("rank_age") if a in NAVER_RANK_AGE_OPTIONS]
+
+    rank_table, rank_error = _build_rank_table(rank_cid, rank_category_name, rank_gender, rank_ages)
+    last_log = db.get_last_naver_rank_log()
+
     return render_template(
         "trend_shopping_insight.html",
         categories=NAVER_SHOPPING_CATEGORIES, category_code=category_code, category_name=category_name,
         months=months, error=result["error"],
         trend=result["trend"], trend_points=trend_points, trend_w=trend_w, trend_h=trend_h,
         device_chart=device_chart, gender_chart=gender_chart, age_chart=age_chart,
+        rank_categories=NAVER_RANK_CATEGORIES, rank_cid=rank_cid, rank_category_name=rank_category_name,
+        rank_gender=rank_gender, rank_ages=rank_ages, rank_age_options=NAVER_RANK_AGE_OPTIONS,
+        rank_table=rank_table, rank_error=rank_error, rank_last_log=dict(last_log) if last_log else None,
+        rank_is_default=(rank_cid == NAVER_RANK_DEFAULT_CID and rank_gender == "" and not rank_ages),
+        trend_groups=db.list_trend_groups(),
     )
+
+
+def _collect_and_store(cid, category_name, gender="", ages=()):
+    """네이버에서 그 조합의 순위를 가져와 오늘 날짜로 저장한다. 우회하지 않고, 실패하면 그대로 알린다."""
+    try:
+        result = naver_rank.fetch_top100(cid, gender=gender, ages=ages)
+    except naver_rank.NaverRankError as e:
+        db.log_naver_rank_collect(False, str(e))
+        return False, str(e)
+    today = date.today().isoformat()
+    db.save_naver_ranks(today, cid, category_name, gender, ",".join(ages), result["range"], result["ranks"])
+    db.log_naver_rank_collect(True, f"{category_name} {len(result['ranks'])}개 저장 (기간 {result['range']})")
+    return True, result["range"]
+
+
+def _build_rank_table(cid, category_name, gender, ages):
+    """오늘치 순위 + 전날/7일 전 대비를 화면에 뿌릴 형태로 만든다.
+    오늘 이 조합을 아직 못 모았으면 지금 바로 한 번 가져와서 그날치로 저장한다 (doc 02의 "나머지는
+    화면에서 고를 때 가져와서 그날 하루 저장" 규칙). 실패하면 마지막으로 성공한 데이터를 대신 보여준다."""
+    age_key = ",".join(ages)
+    today = date.today().isoformat()
+    rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, today)]
+    error = None
+
+    if not rows:
+        ok, info = _collect_and_store(cid, category_name, gender, ages)
+        if ok:
+            rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, today)]
+        else:
+            error = info
+            fallback_dates = db.list_naver_rank_dates(cid, gender, age_key, limit=1)
+            if fallback_dates:
+                rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, fallback_dates[0])]
+
+    if not rows:
+        return None, error
+
+    latest_date = rows[0]["collected_date"]
+    period_range = rows[0]["period_range"]
+    known_dates = set(db.list_naver_rank_dates(cid, gender, age_key, limit=60))
+
+    prev_date = (date.fromisoformat(latest_date) - timedelta(days=1)).isoformat()
+    seven_date = (date.fromisoformat(latest_date) - timedelta(days=7)).isoformat()
+    prev_rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, prev_date)] if prev_date in known_dates else []
+    seven_rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, seven_date)] if seven_date in known_dates else []
+
+    today_ranks = [{"rank": r["rank"], "keyword": r["keyword"]} for r in rows]
+    prev_ranks = [{"rank": r["rank"], "keyword": r["keyword"]} for r in prev_rows]
+    changes = naver_rank.rank_changes(today_ranks, prev_ranks)
+
+    seven_before = {r["keyword"]: r["rank"] for r in seven_rows}
+    for c in changes:
+        old7 = seven_before.get(c["keyword"])
+        c["change_7d"] = None if old7 is None else old7 - c["rank"]
+
+    has_previous = bool(prev_rows)
+    new_keywords = [c for c in changes if c["is_new"]] if has_previous else []
+    risers = sorted([c for c in changes if c["change"] and c["change"] > 0], key=lambda c: -c["change"])[:10]
+
+    return {
+        "collected_date": latest_date,
+        "period_range": period_range,
+        "rows": changes,
+        "has_previous": has_previous,
+        "has_seven": bool(seven_rows),
+        "new_keywords": new_keywords[:10],
+        "risers": risers,
+        "is_stale": latest_date != today,
+    }, error
+
+
+@trend_bp.route("/shopping-insight/collect-now", methods=["POST"])
+def shopping_insight_collect_now():
+    ok, info = _collect_and_store(NAVER_RANK_DEFAULT_CID, "생활/건강", "", ())
+    if ok:
+        flash(f"'생활/건강' 인기검색어 TOP100을 방금 새로 모았어요. (기간: {info})")
+    else:
+        flash("지금 수집이 실패했어요: " + info)
+    return redirect(url_for("trend.shopping_insight"))
+
+
+@trend_bp.route("/rank-keyword/add-to-group", methods=["POST"])
+def rank_keyword_add_to_group():
+    keyword = request.form.get("keyword", "").strip()
+    group_id = request.form.get("group_id", type=int)
+    if not keyword or not group_id:
+        flash("상품군을 선택한 뒤 추가해 주세요.")
+    else:
+        db.add_trend_group_term(group_id, keyword)
+        flash(f"'{keyword}'을(를) 상품군에 담았어요.")
+    return redirect(url_for(
+        "trend.shopping_insight",
+        rank_cid=request.form.get("rank_cid") or None,
+        rank_gender=request.form.get("rank_gender") or None,
+        rank_age=request.form.getlist("rank_age"),
+    ))
 
 
 @trend_bp.route("/add", methods=["POST"])
@@ -461,3 +583,38 @@ def api_replace_platform_sellers():
 def api_platform_seller_status():
     """등록 여부만 가볍게 확인할 수 있는 헬스체크 (인증 불필요, 민감정보 없음)."""
     return jsonify({"api_enabled": bool(os.environ.get("PLATFORM_SELLER_API_KEY"))})
+
+
+# ---------------------------------------------------------------------------
+# 네이버 인기검색어 TOP100 하루 1번 자동 수집 API (Cowork 예약작업 전용)
+#
+# 위 두 API와는 별개의 전용 키(NAVER_RANK_API_KEY)를 써요. "생활/건강 전체" 조합만 모아요
+# (지인이 정한 범위). 다른 분야·성별·연령은 화면에서 볼 때 그때그때 따로 가져와요.
+#
+# 사용 예:
+#   POST https://<railway-domain>/trend/api/collect-ranks
+#   Headers: Authorization: Bearer <NAVER_RANK_API_KEY>
+#   응답: {"ok": true, "info": "2026.09.19. ~ 2026.09.25."} 또는 {"ok": false, "info": "실패 이유"}
+# ---------------------------------------------------------------------------
+
+def _check_naver_rank_api_key():
+    expected = os.environ.get("NAVER_RANK_API_KEY")
+    if not expected:
+        return False
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else request.headers.get("X-API-Key", "")
+    return token == expected
+
+
+@trend_bp.route("/api/collect-ranks", methods=["POST"])
+def api_collect_ranks():
+    if not _check_naver_rank_api_key():
+        return jsonify({"ok": False, "error": "인증 실패 (NAVER_RANK_API_KEY 미설정 또는 키 불일치)"}), 403
+    ok, info = _collect_and_store(NAVER_RANK_DEFAULT_CID, "생활/건강", "", ())
+    return jsonify({"ok": ok, "info": info})
+
+
+@trend_bp.route("/api/collect-ranks", methods=["GET"])
+def api_collect_ranks_status():
+    """등록 여부만 가볍게 확인할 수 있는 헬스체크 (인증 불필요, 민감정보 없음)."""
+    return jsonify({"api_enabled": bool(os.environ.get("NAVER_RANK_API_KEY"))})

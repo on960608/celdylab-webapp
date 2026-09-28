@@ -940,6 +940,71 @@ def list_trend_search_raw(group_id=None, source=None):
     return rows
 
 
+# ---------- 네이버 인기검색어 TOP100 (작업지시서 02) ----------
+
+def save_naver_ranks(collected_date, category_cid, category_name, gender, age, period_range, ranks):
+    """그 날짜·분야·성별·연령 조합의 순위를 통째로 바꿔치기한다 (같은 날 다시 수집해도 중복되지 않도록).
+    ranks: [{"rank": .., "keyword": ..}, ...]"""
+    conn = get_conn()
+    conn.execute(
+        "DELETE FROM naver_rank_entries WHERE collected_date=? AND category_cid=? AND gender=? AND age=?",
+        (collected_date, category_cid, gender, age),
+    )
+    created_at = now_iso()
+    for r in ranks:
+        conn.execute(
+            """INSERT INTO naver_rank_entries
+               (collected_date, category_cid, category_name, gender, age, period_range, rank, keyword, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (collected_date, category_cid, category_name, gender, age, period_range, r["rank"], r["keyword"], created_at),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_naver_ranks(category_cid, gender, age, collected_date):
+    """그 날짜·분야·성별·연령 조합의 순위를 순위순으로 돌려준다. 없으면 빈 리스트."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT * FROM naver_rank_entries
+           WHERE category_cid=? AND gender=? AND age=? AND collected_date=?
+           ORDER BY rank""",
+        (category_cid, gender, age, collected_date),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def list_naver_rank_dates(category_cid, gender, age, limit=60):
+    """그 분야·성별·연령 조합으로 수집에 성공한 날짜 목록을 최신순으로 돌려준다."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT DISTINCT collected_date FROM naver_rank_entries
+           WHERE category_cid=? AND gender=? AND age=?
+           ORDER BY collected_date DESC LIMIT ?""",
+        (category_cid, gender, age, limit),
+    ).fetchall()
+    conn.close()
+    return [r["collected_date"] for r in rows]
+
+
+def log_naver_rank_collect(ok, message):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO naver_rank_collect_log (attempted_at, ok, message, created_at) VALUES (?, ?, ?, ?)",
+        (now_iso(), 1 if ok else 0, message, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_last_naver_rank_log():
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM naver_rank_collect_log ORDER BY id DESC LIMIT 1").fetchone()
+    conn.close()
+    return row
+
+
 # ---------- 월별 Trend Score 스냅샷 ----------
 
 def upsert_monthly_trend_score(year_month, group_id, score, rank, sources_used, metrics_json):
