@@ -105,8 +105,134 @@
 
 <div class="chart-card" style="margin-top:16px">
   <p class="note" style="margin:0">
-    ⓘ 기기·성별·연령 비중은 네이버 공식 API로 각각 따로 조회한 값을 평균 내어 다시 100%로 맞춘 <b>추정치</b>예요. 데이터랩 화면에 나오는 실제 클릭 비중과 완전히 같은 숫자는 아닐 수 있어요.<br>
-    ⓘ 인기검색어 TOP100 목록은 공식 API로 제공되지 않아서 이 화면에는 포함되지 않았어요. 필요하시면 네이버 데이터랩 사이트에서 직접 확인해 주세요.
+    ⓘ 기기·성별·연령 비중은 네이버 공식 API로 각각 따로 조회한 값을 평균 내어 다시 100%로 맞춘 <b>추정치</b>예요. 데이터랩 화면에 나오는 실제 클릭 비중과 완전히 같은 숫자는 아닐 수 있어요.
   </p>
 </div>
+
+<div class="block-head" style="margin-top:28px">
+  <div class="eyebrow">RANKING · TOP100</div>
+  <h2>인기검색어 TOP100</h2>
+  <p class="note" style="margin:0">네이버 데이터랩 쇼핑인사이트 화면 기준으로 모은 순위예요 (공식 API가 아니라 비공식 방식이라 네이버가 바꾸면 잠시 멈출 수 있어요). 생활/건강 · 전체 조합은 하루 1번 자동으로 모으고, 다른 분야·성별·연령을 고르면 그 조합만 오늘 하루치를 새로 가져와요.</p>
+</div>
+
+{% if rank_last_log and not rank_last_log.ok %}
+<div class="chart-card" style="margin-bottom:16px;background:rgba(230,160,40,.08);border-color:rgba(230,160,40,.35)">
+  <p class="note" style="margin:0">⚠ 최근 수집 실패: {{ rank_last_log.message }} ({{ rank_last_log.attempted_at }})</p>
+  <p class="note" style="margin:6px 0 0">아래는 마지막으로 성공했던 데이터예요.</p>
+</div>
+{% endif %}
+
+<div class="chart-card" style="margin-bottom:16px">
+  <form method="get" action="{{ url_for('trend.shopping_insight') }}" class="ins-form-grid" style="align-items:end">
+    <input type="hidden" name="category" value="{{ category_code }}">
+    <input type="hidden" name="months" value="{{ months }}">
+    <label>분야
+      <select name="rank_cid" onchange="this.form.submit()">
+        {% for name, code in rank_categories %}
+        <option value="{{ code }}" {{ 'selected' if code==rank_cid }}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>성별
+      <select name="rank_gender" onchange="this.form.submit()">
+        <option value="" {{ 'selected' if rank_gender=='' }}>전체</option>
+        <option value="f" {{ 'selected' if rank_gender=='f' }}>여성</option>
+        <option value="m" {{ 'selected' if rank_gender=='m' }}>남성</option>
+      </select>
+    </label>
+    <label class="ins-wide">연령 (여러 개 선택 가능)
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+        {% for a in rank_age_options %}
+        <label style="font-weight:400;font-size:13px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" name="rank_age" value="{{ a }}" {{ 'checked' if a in rank_ages }} onchange="this.form.submit()"> {{ a }}대
+        </label>
+        {% endfor %}
+      </div>
+    </label>
+  </form>
+  {% if rank_is_default %}
+  <p class="note" style="margin-top:8px">이 조합(생활/건강 · 전체)은 매일 자동으로 모아요.</p>
+  {% else %}
+  <p class="note" style="margin-top:8px">이 조합은 오늘 본 김에 한 번 가져온 거예요. 매일 자동으로 모으지는 않아요.</p>
+  {% endif %}
+</div>
+
+{% if rank_error and not rank_table %}
+<div class="chart-card" style="margin-bottom:16px">
+  <p class="note" style="margin:0">⚠ 순위를 가져오지 못했어요: {{ rank_error }}</p>
+</div>
+{% elif rank_table %}
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head">
+    <div><h3>{{ rank_category_name }} · {{ '여성' if rank_gender=='f' else ('남성' if rank_gender=='m' else '전체') }}{% if rank_ages %} · {{ rank_ages|join(', ') }}대{% endif %}</h3>
+    <div class="unit">{{ rank_table.period_range }} 기준 · 수집일 {{ rank_table.collected_date }}{% if rank_table.is_stale %} (오늘 수집이 안 되어 이전 데이터를 보여줘요){% endif %}</div></div>
+    <form method="post" action="{{ url_for('trend.shopping_insight_collect_now') }}"><button class="refresh-btn" type="submit">지금 수집</button></form>
+  </div>
+
+  <div class="chart-svg-wrap">
+    <table class="data-table">
+      <thead><tr><th>순위</th><th>키워드</th><th>전날 대비</th><th>7일 전 대비</th><th>상품군에 추가</th></tr></thead>
+      <tbody>
+        {% for r in rank_table.rows %}
+        <tr>
+          <td>{{ r.rank }}</td>
+          <td>{{ r.keyword }}</td>
+          <td>
+            {% if not rank_table.has_previous %}-
+            {% elif r.is_new %}<span class="ins-badge warn">NEW</span>
+            {% elif r.change is none %}-
+            {% elif r.change > 0 %}<span class="ins-badge pass">▲{{ r.change }}</span>
+            {% elif r.change < 0 %}<span class="ins-badge fail">▼{{ -r.change }}</span>
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            {% if not rank_table.has_seven %}-
+            {% elif r.change_7d is none %}NEW
+            {% elif r.change_7d > 0 %}▲{{ r.change_7d }}
+            {% elif r.change_7d < 0 %}▼{{ -r.change_7d }}
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            <form method="post" action="{{ url_for('trend.rank_keyword_add_to_group') }}" style="display:flex;gap:4px">
+              <input type="hidden" name="keyword" value="{{ r.keyword }}">
+              <input type="hidden" name="rank_cid" value="{{ rank_cid }}">
+              <input type="hidden" name="rank_gender" value="{{ rank_gender }}">
+              {% for a in rank_ages %}<input type="hidden" name="rank_age" value="{{ a }}">{% endfor %}
+              <select name="group_id" style="width:120px;font-size:12px">
+                <option value="">상품군 선택</option>
+                {% for g in trend_groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+              </select>
+              <button class="refresh-btn" style="padding:2px 8px;font-size:12px" type="submit">추가</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if rank_table.has_previous %}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+    <div class="gp-block">
+      <b>새로 들어온 키워드</b>
+      {% if rank_table.new_keywords %}
+      <p>{% for c in rank_table.new_keywords %}{{ c.rank }}위 {{ c.keyword }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+      {% else %}<p class="note">없어요.</p>{% endif %}
+    </div>
+    <div class="gp-block">
+      <b>많이 오른 키워드</b>
+      {% if rank_table.risers %}
+      <p>{% for c in rank_table.risers %}{{ c.keyword }} ▲{{ c.change }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+      {% else %}<p class="note">없어요.</p>{% endif %}
+    </div>
+  </div>
+  {% else %}
+  <p class="note" style="margin-top:12px">전날 데이터가 아직 없어서 변화는 다음 날부터 보여요.</p>
+  {% endif %}
+</div>
+{% else %}
+<div class="chart-card" style="margin-bottom:16px">
+  <p class="note" style="margin:0">아직 데이터가 없어요.</p>
+</div>
+{% endif %}
 {% endblock %}
