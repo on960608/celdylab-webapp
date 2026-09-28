@@ -72,6 +72,56 @@ CREATE TABLE IF NOT EXISTS gongu_records (
   created_at TEXT NOT NULL
 );
 
+-- 제품 옵션 (옵션 이름 / 구성 수량 / 판매가) — 작업지시서 01의 2단계.
+-- 주문 엑셀의 옵션 글자를 이 표준 옵션에 연결(alias)해서 옵션별 판매량/매출을 계산해요.
+CREATE TABLE IF NOT EXISTS product_options (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product TEXT NOT NULL,
+  option_name TEXT NOT NULL,
+  pack_qty INTEGER NOT NULL DEFAULT 1,   -- 구성 수량: 옵션 하나에 실제로 들어가는 개수
+  price INTEGER NOT NULL DEFAULT 0,      -- 판매가
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(product, option_name)
+);
+
+-- 옵션 별칭 — 주문 엑셀에 적힌 옵션 글자(raw_text) → 표준 옵션(product_options.option_name) 연결.
+-- 한 번 연결하면 다음 업로드부터는 자동으로 인식돼요. (사람이 직접 연결 — 자동 추측은 하지 않음)
+-- raw_text 기준으로 전체에서 하나만 있으면 돼요. 한 공구 회차 안에 여러 제품의 옵션이
+-- 섞여 있는 경우가 있어서(코드니처 세정서버: 변기/하수구/세트가 한 정산서에 같이 나옴),
+-- product는 "어느 제품 화면에 보여줄지" 표시용일 뿐 매칭 조건으로는 안 써요.
+CREATE TABLE IF NOT EXISTS option_aliases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product TEXT NOT NULL DEFAULT '',
+  raw_text TEXT NOT NULL UNIQUE, -- 원본 저장(표시용). 매칭은 normalize()로 공백 제거해서 비교해요.
+  option_name TEXT NOT NULL,
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
+
+-- 공구 기록(gongu_records) 한 건의 옵션별 판매 내역 — 주문 엑셀을 올려서 저장하면 여기 채워져요.
+CREATE TABLE IF NOT EXISTS gongu_record_options (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_id INTEGER NOT NULL REFERENCES gongu_records(id) ON DELETE CASCADE,
+  option_name TEXT NOT NULL,
+  qty INTEGER NOT NULL DEFAULT 0,        -- 주문 수량 (반품 포함)
+  revenue INTEGER NOT NULL DEFAULT 0,
+  return_qty INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  UNIQUE(record_id, option_name)
+);
+
+-- 같은 주문 엑셀 파일을 두 번 올렸는지 확인하는 용도 (file_fingerprint)
+CREATE TABLE IF NOT EXISTS gongu_order_uploads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_id INTEGER NOT NULL REFERENCES gongu_records(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL DEFAULT '',
+  fingerprint TEXT NOT NULL,
+  uploaded_by TEXT,
+  uploaded_at TEXT NOT NULL,
+  UNIQUE(record_id, fingerprint)
+);
+
 -- ---------------------------------------------------------------------------
 -- 협찬 인원 리스트업 / 컨택관리
 -- ---------------------------------------------------------------------------

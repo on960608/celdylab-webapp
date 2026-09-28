@@ -50,6 +50,29 @@ def _migrate(conn):
         (now_iso(),),
     )
 
+    # 코드니처 세정서버 제품 옵션 — 구글드라이브 정산서 9건에서 확인한 값 (2026-09-28, 지인 확인 완료).
+    # "변기/하수구" 콤보 옵션은 세정서버세트, "하수구" 단독 옵션은 하수구세정서버로 분류했어요.
+    # "변기" 단독 옵션은 DB에 아직 없던 제품이라 "변기세정서버"라는 이름으로 새로 만들었어요 —
+    # 화면에서 확인하고 이름이 다르면 언제든 고칠 수 있어요. INSERT OR IGNORE라서 이미 있으면 안 건드려요.
+    seed_options = [
+        ("변기세정서버", "변기 1+1", 2, 14900),
+        ("변기세정서버", "변기 2+1", 3, 21900),
+        ("변기세정서버", "변기 3+2", 5, 33900),
+        ("하수구세정서버", "하수구 1개", 1, 17900),
+        ("하수구세정서버", "하수구 2개", 2, 27900),
+        ("하수구세정서버", "하수구 2+1", 3, 34800),
+        ("하수구세정서버", "하수구 3+2", 5, 51700),
+        ("세정서버세트", "변기/하수구 1+1", 2, 27900),
+        ("세정서버세트", "변기/하수구 2+2", 4, 37900),
+        ("세정서버세트", "변기/하수구 3+2", 5, 40900),
+    ]
+    for product, option_name, pack_qty, price in seed_options:
+        conn.execute(
+            "INSERT OR IGNORE INTO product_options (product, option_name, pack_qty, price, created_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (product, option_name, pack_qty, price, "system", now_iso()),
+        )
+
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -290,6 +313,144 @@ def update_gongu_record(record_id, data):
 def clear_gongu_records():
     conn = get_conn()
     conn.execute("DELETE FROM gongu_records")
+    conn.commit()
+    conn.close()
+
+
+# ---------- 공구 옵션 (작업지시서 01의 2단계: 제품 옵션 / 옵션 별칭 / 공구별 옵션 판매) ----------
+
+def _normalize(text):
+    """띄어쓰기 차이를 없앤다. gongu_forecast.normalize와 같은 규칙."""
+    return "".join(str(text or "").split())
+
+
+def list_product_options(product=None):
+    conn = get_conn()
+    if product:
+        rows = conn.execute(
+            "SELECT * FROM product_options WHERE product = ? ORDER BY id", (product,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM product_options ORDER BY product, id").fetchall()
+    conn.close()
+    return rows
+
+
+def upsert_product_option(product, option_name, pack_qty, price, created_by):
+    """같은 제품+옵션명이면 구성 수량/판매가를 덮어쓰고, 없으면 새로 만든다."""
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO product_options (product, option_name, pack_qty, price, created_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(product, option_name) DO UPDATE SET
+             pack_qty=excluded.pack_qty, price=excluded.price""",
+        (product, option_name, pack_qty, price, created_by, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_product_option(option_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM product_options WHERE id = ?", (option_id,))
+    conn.commit()
+    conn.close()
+
+
+def find_product_option(option_name):
+    """표준 옵션명으로 제품 옵션(구성 수량/판매가) 하나를 찾는다 (제품 구분 없이 전체에서). 없으면 None."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM product_options WHERE option_name = ?", (option_name,)
+    ).fetchone()
+    conn.close()
+    return row
+
+
+def find_option_alias(raw_text):
+    """이미 연결해둔 표준 옵션명을 찾는다 (제품 구분 없이 전체에서). 없으면 None.
+
+    한 공구 회차 정산서에 변기/하수구/세트 옵션이 섞여 나오는 경우가 있어서
+    raw_text 하나로만 찾는다 (product로 좁히지 않음).
+    """
+    conn = get_conn()
+    target = _normalize(raw_text)
+    rows = conn.execute("SELECT raw_text, option_name FROM option_aliases").fetchall()
+    conn.close()
+    for row in rows:
+        if _normalize(row["raw_text"]) == target:
+            return row["option_name"]
+    return None
+
+
+def create_option_alias(raw_text, option_name, product, created_by):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO option_aliases (product, raw_text, option_name, created_by, created_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(raw_text) DO UPDATE SET option_name=excluded.option_name, product=excluded.product""",
+        (product, raw_text, option_name, created_by, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_option_aliases(product=None):
+    conn = get_conn()
+    if product:
+        rows = conn.execute(
+            "SELECT * FROM option_aliases WHERE product = ? ORDER BY id", (product,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM option_aliases ORDER BY product, id").fetchall()
+    conn.close()
+    return rows
+
+
+def save_gongu_record_options(record_id, rows):
+    """그 공구 기록의 옵션별 내역을 통째로 바꿔치기한다 (다시 올리면 이전 값은 지워짐).
+
+    rows: [{"option_name": .., "qty": .., "revenue": .., "return_qty": ..}, ...]
+    """
+    conn = get_conn()
+    conn.execute("DELETE FROM gongu_record_options WHERE record_id = ?", (record_id,))
+    for r in rows:
+        conn.execute(
+            """INSERT INTO gongu_record_options (record_id, option_name, qty, revenue, return_qty, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (record_id, r["option_name"], r["qty"], r["revenue"], r.get("return_qty", 0), now_iso()),
+        )
+    conn.commit()
+    conn.close()
+
+
+def list_gongu_record_options(record_id):
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM gongu_record_options WHERE record_id = ? ORDER BY qty DESC", (record_id,)
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+def find_order_upload(record_id, fingerprint):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM gongu_order_uploads WHERE record_id = ? AND fingerprint = ?",
+        (record_id, fingerprint),
+    ).fetchone()
+    conn.close()
+    return row
+
+
+def record_order_upload(record_id, filename, fingerprint, uploaded_by):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO gongu_order_uploads (record_id, filename, fingerprint, uploaded_by, uploaded_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(record_id, fingerprint) DO UPDATE SET uploaded_at=excluded.uploaded_at""",
+        (record_id, filename, fingerprint, uploaded_by, now_iso()),
+    )
     conn.commit()
     conn.close()
 

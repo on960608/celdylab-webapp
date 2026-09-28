@@ -3,6 +3,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 import db
 from analysis import gongu_net_sold, gongu_return_pct, gongu_tier, TIER_ORDER, won, pct, manwon, BRANDS
 from gongu_forecast import bands, per_10k, round_half_up
+from gongu_order_parser import parse_courier_orders
+from order_excel import file_fingerprint
 
 gongu_bp = Blueprint("gongu", __name__, url_prefix="/gongu-perf")
 
@@ -232,3 +234,124 @@ def clear():
     db.clear_gongu_records()
     flash("전체 데이터를 초기화했어요.")
     return redirect(url_for("gongu.index"))
+
+
+# ---------- 주문 엑셀 올리기 (작업지시서 01의 2단계) ----------
+# 고객 이름·연락처·주소는 gongu_order_parser.py가 애초에 읽지 않는다. 이 화면과 아래 라우트는
+# 그 파서가 돌려준 "옵션별 수량 합계"만 다룬다.
+
+def _get_record_or_404(record_id):
+    conn = db.get_conn()
+    row = conn.execute("SELECT * FROM gongu_records WHERE id = ?", (record_id,)).fetchone()
+    conn.close()
+    if row is None:
+        from flask import abort
+        abort(404)
+    return dict(row)
+
+
+@gongu_bp.route("/<int:record_id>/orders", methods=["GET"])
+def orders_form(record_id):
+    record = _get_record_or_404(record_id)
+    existing = [dict(r) for r in db.list_gongu_record_options(record_id)]
+    return render_template("gongu_orders.html", record=record, existing=existing, preview=None)
+
+
+@gongu_bp.route("/<int:record_id>/orders/preview", methods=["POST"])
+def orders_preview(record_id):
+    record = _get_record_or_404(record_id)
+    f = request.files.get("order_file")
+    if not f or not f.filename:
+        flash("파일을 선택해 주세요.")
+        return redirect(url_for("gongu.orders_form", record_id=record_id))
+
+    data = f.read()
+    try:
+        parsed = parse_courier_orders(data, filename=f.filename)
+    except ValueError as e:
+        flash(str(e))
+        return redirect(url_for("gongu.orders_form", record_id=record_id))
+
+    fingerprint = file_fingerprint(data)
+    already_uploaded = db.find_order_upload(record_id, fingerprint) is not None
+
+    all_options = [dict(o) for o in db.list_product_options()]
+    preview_rows = []
+    for r in parsed["rows"]:
+        option_name = db.find_option_alias(r["option"])
+        matched = None
+        if option_name:
+            opt = db.find_product_option(option_name)
+            matched = dict(opt) if opt else None
+        preview_rows.append({
+            "raw": r["option"],
+            "qty": r["qty"],
+            "return_qty": r["return_qty"],
+            "option_name": option_name,
+            "price": matched["price"] if matched else None,
+        })
+
+    preview = {
+        "filename": f.filename,
+        "fingerprint": fingerprint,
+        "already_uploaded": already_uploaded,
+        "rows": preview_rows,
+        "total_qty": parsed["total_qty"],
+        "total_return_qty": parsed["total_return_qty"],
+        "unmatched_count": sum(1 for r in preview_rows if not r["option_name"]),
+    }
+    return render_template("gongu_orders.html", record=record, existing=None,
+                            preview=preview, all_options=all_options)
+
+
+@gongu_bp.route("/<int:record_id>/orders/confirm", methods=["POST"])
+def orders_confirm(record_id):
+    record = _get_record_or_404(record_id)
+    f = request.form
+    n = int(f.get("row_count") or 0)
+
+    rows_to_save = []
+    for i in range(n):
+        raw = f.get(f"row_{i}_raw", "")
+        qty = int(f.get(f"row_{i}_qty") or 0)
+        return_qty = int(f.get(f"row_{i}_return_qty") or 0)
+        option_name = (f.get(f"row_{i}_option_name") or "").strip()
+        if not raw or not qty or not option_name:
+            continue
+        # 처음 연결하는 옵션이면 별칭으로 저장해서 다음부터는 자동으로 인식되게 한다.
+        if db.find_option_alias(raw) != option_name:
+            opt_row = db.find_product_option(option_name)
+            product_label = opt_row["product"] if opt_row else ""
+            db.create_option_alias(raw, option_name, product_label, session.get("user_name"))
+        opt_row = db.find_product_option(option_name)
+        price = opt_row["price"] if opt_row else 0
+        rows_to_save.append({
+            "option_name": option_name,
+            "qty": qty,
+            "revenue": qty * price,
+            "return_qty": return_qty,
+        })
+
+    if not rows_to_save:
+        flash("연결된 옵션이 없어서 저장하지 않았어요. 옵션을 선택한 뒤 다시 눌러주세요.")
+        return redirect(url_for("gongu.orders_form", record_id=record_id))
+
+    db.save_gongu_record_options(record_id, rows_to_save)
+
+    total_qty = sum(r["qty"] for r in rows_to_save)
+    total_revenue = sum(r["revenue"] for r in rows_to_save)
+    total_return = sum(r["return_qty"] for r in rows_to_save)
+    updated = {
+        "month": record["month"], "channel": record["channel"], "brand": record["brand"],
+        "product": record["product"], "seller": record["seller"], "followers": record["followers"],
+        "link": record["link"], "revenue": total_revenue, "sold_qty": total_qty, "return_qty": total_return,
+    }
+    db.update_gongu_record(record_id, updated)
+
+    filename = f.get("filename", "")
+    fingerprint = f.get("fingerprint", "")
+    if filename and fingerprint:
+        db.record_order_upload(record_id, filename, fingerprint, session.get("user_name"))
+
+    flash(f"주문 엑셀을 반영했어요. 판매 수량 {total_qty:,}개 · 매출 {total_revenue:,}원 · 반품 {total_return:,}개")
+    return redirect(url_for("gongu.index", brand=record["brand"] or None))
