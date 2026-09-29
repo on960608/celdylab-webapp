@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}붙여넣기 미리보기 · 셀디랩 콘텐츠팀 웹앱{% endblock %}
+{% block content %}
+<div class="block-head">
+  <div class="eyebrow">EXTERNAL TREND · PASTE PREVIEW</div>
+  <h2>{{ platform }} 붙여넣기 미리보기</h2>
+  <p class="note" style="margin:0">아래 {{ rows|length }}건이 이렇게 저장돼요. 내용이 맞으면 "저장하기"를 눌러주세요. 잘못됐으면 뒤로 가서 다시 붙여넣어 주세요 (아직 저장되지 않았어요).</p>
+</div>
+
+<div class="chart-card" style="margin-bottom:16px;overflow-x:auto">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>셀러</th><th>브랜드</th><th>제품명</th><th>공구가</th><th>링크</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.seller }}</td>
+        <td>{{ r.brand }}</td>
+        <td>{{ r.product }}</td>
+        <td>{{ '{:,}'.format(r.price) if r.price else '' }}</td>
+        <td>{% if r.link %}<a href="{{ r.link }}" target="_blank" rel="noopener">열기</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="chart-card" style="display:flex;gap:10px;align-items:center">
+  <form method="post" action="{{ url_for('trend.platform_sellers_paste_confirm') }}">
+    <button type="submit" class="refresh-btn">이대로 저장하기 ({{ rows|length }}건)</button>
+  </form>
+  <a href="{{ url_for('trend.index') }}">취소하고 돌아가기</a>
+</div>
+{% endblock %}

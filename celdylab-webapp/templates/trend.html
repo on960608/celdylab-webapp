@@ -4,7 +4,7 @@
 <div class="block-head">
   <div class="eyebrow">ANALYSIS · EXTERNAL MALL TREND</div>
   <h2>외부몰 트렌드 분석</h2>
-  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아)마다 인기셀러를 등록하면, 여러 플랫폼에 공통으로 등록된 셀러와 많이 공구되는 브랜드·제품 TOP10이 자동으로 집계돼요. <a href="{{ url_for('trend.groups_index') }}">상품군(비슷한 검색어 묶음) 관리 →</a></p>
+  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아(09more))마다 인기셀러를 등록하면, 여러 플랫폼에 공통으로 등록된 셀러와 많이 공구되는 브랜드·제품 TOP10이 자동으로 집계돼요. <a href="{{ url_for('trend.groups_index') }}">상품군(비슷한 검색어 묶음) 관리 →</a></p>
 </div>
 
 <div class="chart-card" style="margin-bottom:16px">
@@ -69,6 +69,22 @@
     <div class="tab-toggle" id="ps-pager-{{ loop.index }}" style="margin-top:10px;margin-bottom:0"></div>
   </div>
   {% endfor %}
+</div>
+
+<div class="chart-card" style="margin-bottom:16px">
+  <div class="chart-card-head"><div><h3>붙여넣기로 한꺼번에 등록</h3><div class="unit">사람이 직접 화면을 보고 확인해야 하는 플랫폼(위시버니 공구 목록 등)을 위한 기능이에요. 화면에서 복사한 목록을 한 줄에 하나씩 아래 형식으로 붙여넣으면, 저장 전에 미리보기를 보여줘요.</div></div></div>
+  <p class="note" style="margin:0 0 10px">형식: <code>셀러 | 브랜드 | 제품명 | 공구가 | 링크</code> (셀러만 필수, 나머지는 비워도 돼요)</p>
+  <form method="post" action="{{ url_for('trend.platform_sellers_paste_preview') }}" class="ins-form-grid">
+    <label>플랫폼
+      <select name="platform" required>
+        {% for p in platforms %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="ins-wide">붙여넣기
+      <textarea name="raw_text" rows="5" placeholder="하봄 | 레벤호프 | 내열유리용기 | 12900 | https://...&#10;다른셀러 | | 텀블러세정제 | 9900 | " required style="width:100%;font-family:inherit;padding:8px;border-radius:8px;border:1px solid var(--line)"></textarea>
+    </label>
+    <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">미리보기</button></div>
+  </form>
 </div>
 
 <div class="block-head">
