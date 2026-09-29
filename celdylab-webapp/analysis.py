@@ -5,17 +5,22 @@
 from datetime import date, datetime
 
 BRANDS = ["코드니처", "빠이러스", "라이프스타일마트"]
-TREND_PLATFORMS = ["캘린", "82market", "위시버니", "지금하는공구", "인공", "공구모아"]
+TREND_PLATFORMS = ["캘린", "82market", "위시버니", "지금하는공구", "인공", "공구모아(09more)"]
 TREND_CATEGORIES = ["리빙", "여행", "홈인테리어", "패션잡화", "주방용품", "생활용품", "기타"]
 
 # 인플루언서 공동구매(공구)가 활발히 진행되는 모니터링 대상 플랫폼
+# 2026-09-29: 원래의 "공구모아"(gonggumoa.com)는 서면 동의 없는 자동 수집을 금지하고 법적 조치를
+# 경고하고 있어 목록에서 뺐어요(작업지시서 03). 대신 09more.com으로 채웠는데, 공교롭게 이 사이트도
+# 스스로를 "공구모아"라고 불러요(같은 이름을 쓰는 서로 다른 회사) — 그래서 헷갈리지 않도록 화면에는
+# "공구모아(09more)"로 표시해요. 인스타 인플루언서가 셀러명·인스타 계정과 함께 진행 중인 공구를
+# 그대로 보여주고, 로그인도 필요 없고 robots.txt도 일반 수집을 막지 않아 원래 6개와 성격이 잘 맞아요.
 TREND_PLATFORM_LINKS = [
     {"name": "캘린 (Calen)", "url": "https://www.calen.co.kr/", "desc": "인플루언서 공동구매"},
     {"name": "82market", "url": "https://www.82market.com/", "desc": "인플루언서 공구 마켓"},
     {"name": "위시버니 (드랍)", "url": "https://www.wishbunny.me/drop", "desc": "공구 일정·알림"},
     {"name": "지금하는공구", "url": "https://www.09now.com/", "desc": "인스타 공구 검색엔진"},
     {"name": "인공 (IN gong)", "url": "https://insta-gong.com/category/kitchen-clean", "desc": "주방/청소 특화 인스타 공구 모음"},
-    {"name": "공구모아", "url": "https://gonggumoa.com/", "desc": "공구 일정·인기 공구 통합 모음"},
+    {"name": "공구모아(09more)", "url": "https://www.09more.com/", "desc": "인스타 인플루언서 공구 모음 (원래 공구모아·gonggumoa.com 대체)"},
 ]
 
 

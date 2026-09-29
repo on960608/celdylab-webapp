@@ -43,6 +43,15 @@ def _migrate(conn):
         # 네이버 쇼핑인사이트 API 호출에 필요한 카테고리 코드(예: "50000006"). 선택 항목이라 비워둘 수 있어요.
         conn.execute("ALTER TABLE trend_keyword_groups ADD COLUMN shopping_category TEXT DEFAULT ''")
 
+    # 작업지시서 03: 외부몰 자동수집이 인스타 계정·팔로워·브랜드까지 받을 수 있도록 칸 추가
+    # (기존에 쌓여있던 기록은 그대로 두고 새 칸만 빈 값으로 추가돼요)
+    if "insta_handle" not in cols:
+        conn.execute("ALTER TABLE trend_records ADD COLUMN insta_handle TEXT DEFAULT ''")
+    if "followers" not in cols:
+        conn.execute("ALTER TABLE trend_records ADD COLUMN followers INTEGER DEFAULT 0")
+    if "brand" not in cols:
+        conn.execute("ALTER TABLE trend_records ADD COLUMN brand TEXT DEFAULT ''")
+
     # 상품기회점수 가중치는 항상 정확히 한 행(id=1)이 있어야 화면에서 바로 읽고 조정할 수 있어요.
     conn.execute(
         "INSERT OR IGNORE INTO opportunity_weights (id, trend_weight, seeding_weight, gongu_weight, fit_weight, updated_at) "
@@ -570,12 +579,80 @@ def list_trend_records():
 def create_trend_record(data, created_by):
     conn = get_conn()
     conn.execute(
-        """INSERT INTO trend_records (check_date, platform, seller, product, category, price, link, product_group_id, created_by, created_at)
-           VALUES (:check_date, :platform, :seller, :product, :category, :price, :link, :product_group_id, :created_by, :created_at)""",
-        {"product_group_id": None, **data, "created_by": created_by, "created_at": now_iso()},
+        """INSERT INTO trend_records
+           (check_date, platform, seller, product, category, price, link, product_group_id,
+            insta_handle, followers, brand, created_by, created_at)
+           VALUES (:check_date, :platform, :seller, :product, :category, :price, :link, :product_group_id,
+                   :insta_handle, :followers, :brand, :created_by, :created_at)""",
+        {"product_group_id": None, "insta_handle": "", "followers": 0, "brand": "",
+         **data, "created_by": created_by, "created_at": now_iso()},
     )
     conn.commit()
     conn.close()
+
+
+def _iso_week_range(check_date_str):
+    """check_date("YYYY-MM-DD")가 속한 주(월~일)의 시작/끝 날짜를 ("YYYY-MM-DD", "YYYY-MM-DD")로 돌려줘요.
+    날짜 형식이 이상하면 (None, None)을 돌려줘서 호출 쪽이 "이번 주 판정 불가"로 처리하게 해요."""
+    try:
+        d = datetime.strptime(check_date_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None, None
+    from datetime import timedelta
+    monday = d - timedelta(days=d.weekday())
+    sunday = monday + timedelta(days=6)
+    return monday.isoformat(), sunday.isoformat()
+
+
+def upsert_trend_record(data, created_by):
+    """자동 수집(Cowork 예약작업 등)이 보낸 기록을 저장해요.
+    같은 주(월~일)에 같은 플랫폼·셀러·제품이 이미 있으면 새로 만들지 않고 그 행을 갱신하고,
+    없으면 새로 만들어요. 기존 기록(수동 입력분 포함)은 이 함수가 지우지 않아요.
+    반환값: (created_bool, record_id)"""
+    week_start, week_end = _iso_week_range(str(data.get("check_date", "")).strip())
+    conn = get_conn()
+    existing = None
+    if week_start:
+        existing = conn.execute(
+            """SELECT id FROM trend_records
+               WHERE platform = :platform AND seller = :seller AND product = :product
+                 AND check_date >= :week_start AND check_date <= :week_end
+               ORDER BY id DESC LIMIT 1""",
+            {"platform": data.get("platform", ""), "seller": data.get("seller", ""),
+             "product": data.get("product", ""), "week_start": week_start, "week_end": week_end},
+        ).fetchone()
+
+    payload = {
+        "product_group_id": None, "insta_handle": "", "followers": 0, "brand": "",
+        **data, "created_by": created_by, "created_at": now_iso(),
+    }
+
+    if existing:
+        payload["id"] = existing["id"]
+        conn.execute(
+            """UPDATE trend_records SET
+                 check_date=:check_date, category=:category, price=:price, link=:link,
+                 insta_handle=:insta_handle, followers=:followers, brand=:brand,
+                 created_by=:created_by, created_at=:created_at
+               WHERE id=:id""",
+            payload,
+        )
+        conn.commit()
+        conn.close()
+        return False, existing["id"]
+
+    cur = conn.execute(
+        """INSERT INTO trend_records
+           (check_date, platform, seller, product, category, price, link, product_group_id,
+            insta_handle, followers, brand, created_by, created_at)
+           VALUES (:check_date, :platform, :seller, :product, :category, :price, :link, :product_group_id,
+                   :insta_handle, :followers, :brand, :created_by, :created_at)""",
+        payload,
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return True, new_id
 
 
 def delete_trend_record(record_id):
@@ -660,6 +737,62 @@ def replace_platform_sellers(platform, rows, created_by):
         )
     conn.commit()
     conn.close()
+
+
+def merge_platform_seller(platform, data, created_by):
+    """작업지시서 03: /api/records로 들어온 자동수집 데이터를 "① 플랫폼별 인기셀러" 명단에도 반영해요.
+    replace_platform_sellers처럼 통째로 지우고 새로 채우지 않고, 셀러 단위로 병합해요:
+    - 이미 그 플랫폼에 같은 셀러가 있으면: 새로 들어온 값 중 비어있지 않은 것만 채워 넣어요
+      (기존에 있던 값은 새 값이 빈칸이면 그대로 두고, 빈칸("제품 정보 없음")이었던 곳만 채워요).
+    - 없으면: 그 플랫폼이 아직 20명 미만일 때만 새로 추가해요(20명이면 자동으로는 추가하지 않음).
+    반환값: "updated" | "created" | "skipped_full" """
+    seller = (data.get("seller") or "").strip()
+    if not seller:
+        return "skipped_full"
+
+    conn = get_conn()
+    existing = conn.execute(
+        "SELECT * FROM trend_platform_sellers WHERE platform = ? AND seller = ?",
+        (platform, seller),
+    ).fetchone()
+
+    new_vals = {
+        "brand": (data.get("brand") or "").strip(),
+        "product": (data.get("product") or "").strip(),
+        "frequency_note": (data.get("insta_handle") or "").strip(),
+        "link": (data.get("link") or "").strip(),
+        "check_date": (data.get("check_date") or "").strip(),
+    }
+
+    if existing:
+        merged = {k: (new_vals[k] if new_vals[k] else existing[k]) for k in new_vals}
+        conn.execute(
+            """UPDATE trend_platform_sellers SET
+                 brand=:brand, product=:product, frequency_note=:frequency_note,
+                 link=:link, check_date=:check_date
+               WHERE id=:id""",
+            {**merged, "id": existing["id"]},
+        )
+        conn.commit()
+        conn.close()
+        return "updated"
+
+    count = conn.execute(
+        "SELECT COUNT(*) AS n FROM trend_platform_sellers WHERE platform = ?", (platform,)
+    ).fetchone()["n"]
+    if count >= 20:
+        conn.close()
+        return "skipped_full"
+
+    conn.execute(
+        """INSERT INTO trend_platform_sellers
+           (platform, seller, brand, product, frequency_note, link, check_date, created_by, created_at)
+           VALUES (:platform, :seller, :brand, :product, :frequency_note, :link, :check_date, :created_by, :created_at)""",
+        {"platform": platform, "seller": seller, **new_vals, "created_by": created_by, "created_at": now_iso()},
+    )
+    conn.commit()
+    conn.close()
+    return "created"
 
 
 # ---------- 댓글 이벤트 추첨 ----------

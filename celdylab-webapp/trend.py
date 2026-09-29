@@ -185,6 +185,79 @@ def platform_sellers_delete(seller_id):
     return redirect(url_for("trend.index"))
 
 
+# ---------------------------------------------------------------------------
+# 작업지시서 03: "붙여넣기로 한꺼번에 등록"
+# 사람이 직접 확인해야 하는 플랫폼(위시버니 공구 목록, 자동수집이 막히거나 계속 실패하는 곳 등)을 위한
+# 기능이에요. 화면에서 복사한 목록을 한 줄에 하나씩 붙여넣으면, 미리보기를 보여준 뒤 확인을 눌러야
+# 저장돼요(바로 저장하지 않아요).
+#
+# 한 줄 형식: 셀러 | 브랜드 | 제품명 | 공구가 | 링크
+# (셀러만 필수, 나머지는 비워도 돼요. 예: "하봄 | 레벤호프 | 내열유리용기 | 12900 | https://...")
+# ---------------------------------------------------------------------------
+
+def _parse_paste_lines(raw_text):
+    rows = []
+    for line in raw_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        seller = parts[0] if len(parts) > 0 else ""
+        if not seller:
+            continue
+        brand = parts[1] if len(parts) > 1 else ""
+        product = parts[2] if len(parts) > 2 else ""
+        price_raw = parts[3] if len(parts) > 3 else ""
+        link = parts[4] if len(parts) > 4 else ""
+        try:
+            price = int(price_raw.replace(",", "").replace("원", "")) if price_raw else 0
+        except ValueError:
+            price = 0
+        rows.append({"seller": seller, "brand": brand, "product": product, "price": price, "link": link})
+    return rows
+
+
+@trend_bp.route("/platform-sellers/paste-preview", methods=["POST"])
+def platform_sellers_paste_preview():
+    platform = request.form.get("platform", "").strip()
+    raw_text = request.form.get("raw_text", "")
+    if not platform or platform not in TREND_PLATFORMS:
+        flash("플랫폼을 확인해 주세요.")
+        return redirect(url_for("trend.index"))
+
+    rows = _parse_paste_lines(raw_text)
+    if not rows:
+        flash("붙여넣은 내용에서 읽을 수 있는 줄이 없어요. '셀러 | 브랜드 | 제품명 | 공구가 | 링크' 형식으로 한 줄에 하나씩 넣어 주세요.")
+        return redirect(url_for("trend.index"))
+
+    session["paste_preview"] = {"platform": platform, "rows": rows}
+    return render_template("trend_paste_preview.html", platform=platform, rows=rows)
+
+
+@trend_bp.route("/platform-sellers/paste-confirm", methods=["POST"])
+def platform_sellers_paste_confirm():
+    pending = session.pop("paste_preview", None)
+    if not pending:
+        flash("미리보기가 만료됐어요. 다시 붙여넣어 주세요.")
+        return redirect(url_for("trend.index"))
+
+    platform = pending["platform"]
+    today = date.today().isoformat()
+    saved = 0
+    for r in pending["rows"]:
+        data = {
+            "check_date": today, "platform": platform, "seller": r["seller"],
+            "product": r["product"], "category": "", "price": r["price"], "link": r["link"],
+            "product_group_id": None, "insta_handle": "", "followers": 0, "brand": r["brand"],
+        }
+        db.upsert_trend_record(data, session.get("user_name") or "manual-paste")
+        db.merge_platform_seller(platform, data, session.get("user_name") or "manual-paste")
+        saved += 1
+
+    flash(f"{platform}에서 {saved}건을 붙여넣기로 등록했어요.")
+    return redirect(url_for("trend.index"))
+
+
 @trend_bp.route("/<int:record_id>/tag", methods=["POST"])
 def tag(record_id):
     group_id = request.form.get("product_group_id", type=int)
@@ -445,13 +518,19 @@ def clear():
 #   {
 #     "records": [
 #       {"check_date": "2026-09-01", "platform": "82market", "seller": "하봄",
+#        "insta_handle": "@habom_pick", "followers": 12000, "brand": "레벤호프",
 #        "product": "레벤호프 내열유리용기", "category": "주방용품", "price": 12900,
 #        "link": "https://www.82market.com/..."},
 #       ...
 #     ]
 #   }
+#   (insta_handle, followers, brand는 없어도 돼요 — 빈 칸으로 받아요)
 #
-# 응답: {"ok": true, "inserted": N} 또는 {"ok": false, "error": "..."}
+# 응답: {"ok": true, "inserted": N, "updated": N, "seller_list_updated": N} 또는 {"ok": false, "error": "..."}
+#
+# 작업지시서 03: 같은 주(월~일)에 같은 플랫폼·셀러·제품이 다시 들어오면 새로 만들지 않고 그 기록을
+# 갱신해요. 그리고 "① 플랫폼별 인기셀러" 명단에도 함께 반영해요(이미 있는 셀러면 제품 정보만 채우고,
+# 없는 셀러면 그 플랫폼이 20명 미만일 때만 새로 추가해요).
 #
 # AUTOMATION_API_KEY 환경변수를 Railway에 등록해야 이 엔드포인트가 켜져요.
 # (등록 안 돼 있으면 보안을 위해 항상 403을 돌려줘요 — 아무나 호출 못 하게)
@@ -480,6 +559,8 @@ def api_create_records():
     group_name_cache = {}
 
     inserted = 0
+    updated = 0
+    seller_list_updated = 0
     errors = []
     for i, r in enumerate(records):
         seller = str(r.get("seller", "")).strip()
@@ -493,20 +574,35 @@ def api_create_records():
                 g = next((g for g in db.list_trend_groups() if g["name"] == group_name), None)
                 group_name_cache[group_name] = g["id"] if g else None
             group_id = group_name_cache[group_name]
+        platform = str(r.get("platform", "")).strip()
         data = {
             "check_date": str(r.get("check_date", "")).strip(),
-            "platform": str(r.get("platform", "")).strip(),
+            "platform": platform,
             "seller": seller,
             "product": str(r.get("product", "")).strip(),
             "category": str(r.get("category", "")).strip(),
             "price": int(r.get("price") or 0),
             "link": str(r.get("link", "")).strip(),
             "product_group_id": group_id,
+            "insta_handle": str(r.get("insta_handle", "")).strip(),
+            "followers": int(r.get("followers") or 0),
+            "brand": str(r.get("brand", "")).strip(),
         }
-        db.create_trend_record(data, "automation")
-        inserted += 1
+        created, _id = db.upsert_trend_record(data, "automation")
+        if created:
+            inserted += 1
+        else:
+            updated += 1
 
-    return jsonify({"ok": True, "inserted": inserted, "skipped": errors})
+        if platform in TREND_PLATFORMS:
+            result = db.merge_platform_seller(platform, data, "automation")
+            if result in ("created", "updated"):
+                seller_list_updated += 1
+
+    return jsonify({
+        "ok": True, "inserted": inserted, "updated": updated,
+        "seller_list_updated": seller_list_updated, "skipped": errors,
+    })
 
 
 @trend_bp.route("/api/records", methods=["GET"])
