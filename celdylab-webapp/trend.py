@@ -136,7 +136,7 @@ def index():
     common_sellers_page1 = common_sellers[:10]
     common_sellers_page2 = common_sellers[10:20]
 
-    # ② 오른쪽 — 공구 인기 브랜드·제품 TOP10 (6개 플랫폼 통합, 카테고리 구분 없음)
+    # ② 오른쪽 — 공구 인기 브랜드·제품 TOP10 (5개 플랫폼 통합, 카테고리 구분 없음)
     top_brand_products = _top_brand_products(all_seller_rows)
 
     return render_template(
