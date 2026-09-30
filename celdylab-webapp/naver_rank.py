@@ -76,7 +76,7 @@ def _post(form, opener, timeout=15):
     raise cert_error
 
 
-def fetch_top100(cid, end=None, days=7, gender="", ages=(), pause=1.0,
+def fetch_top100(cid, end=None, days=7, gender="", ages=(), pause=0.35,
                  opener=urllib.request.urlopen, sleep=time.sleep):
     """분야 하나의 인기검색어 TOP100을 가져온다.
 
@@ -84,7 +84,13 @@ def fetch_top100(cid, end=None, days=7, gender="", ages=(), pause=1.0,
     gender: "" 전체, "f" 여성, "m" 남성
     ages: 예) ("30", "40"). 비우면 전체 연령
     반환: {"range": "2026.09.19. ~ 2026.09.25.", "ranks": [{"rank": 1, "keyword": "비데"}, ...]}
-    """
+
+    2026-09-30: 오늘 처음 보는 분야·성별·연령 조합을 고르면 이 함수가 5페이지를 순서대로
+    (한 번에 하나씩) 물어보는데, 예전에는 페이지 사이를 1초씩 쉬어서 화면이 뜨기까지 4~5초쯤
+    걸렸다. 요청을 한꺼번에 동시에 보내는 방법도 있지만, 그러면 네이버 입장에서 봤을 때 아주
+    짧은 시간에 여러 번 묻는 패턴으로 보여서 차단될 위험이 살짝 더 있다. 그래서 순서대로
+    물어보는 방식은 그대로 두고, 사이 간격만 1초 -> 0.35초로 줄였다(사용자 확인 후 적용).
+    막히면(차단되면) 이전처럼 그대로 멈추고 알린다 — 우회하지 않는다."""
     if gender not in GENDERS:
         raise ValueError(f"gender는 '', 'f', 'm' 중 하나여야 합니다: {gender!r}")
     bad = [a for a in ages if a not in AGES]
