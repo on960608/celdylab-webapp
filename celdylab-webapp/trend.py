@@ -86,19 +86,23 @@ def _common_seller_analysis(seller_rows):
     return result[:20]
 
 
-def _top_brand_products(seller_rows):
-    """6개 플랫폼 전체 데이터에서 브랜드/제품이 겹치는 걸 모아 등록 횟수 순으로 TOP10을 뽑아요.
-    카테고리 구분 없이, 브랜드·제품명이 모두 비어있는 행은 집계에서 빠져요(집계할 정보가 없어서)."""
+def _top_brand_products(records, current_month):
+    """이번 달(YYYY-MM)에 등록된 기록만 모아, 브랜드/제품이 겹치는 걸 등록 횟수 순으로 TOP10 뽑아요.
+    2026-09-30: 예전에는 "① 플랫폼별 인기셀러" 명단(대부분 브랜드·제품 정보가 비어있음)에서 집계했더니
+    표가 계속 비어있었어요. 지금은 실제 브랜드·제품이 채워지는 "인기 셀러 등록" 기록에서, 이번 달
+    것만 걸러서 집계해요 — 지난달 이전 기록이나 브랜드·제품이 둘 다 비어있는 행은 빠져요."""
     groups = {}
-    for r in seller_rows:
-        brand = (r["brand"] or "").strip()
-        product = (r["product"] or "").strip()
+    for r in records:
+        if not (r.get("check_date") or "").startswith(current_month):
+            continue
+        brand = (r.get("brand") or "").strip()
+        product = (r.get("product") or "").strip()
         if not brand and not product:
             continue
         key = (brand, product)
         g = groups.setdefault(key, {"count": 0, "platforms": set()})
         g["count"] += 1
-        if r["platform"]:
+        if r.get("platform"):
             g["platforms"].add(r["platform"])
 
     result = [
@@ -136,8 +140,10 @@ def index():
     common_sellers_page1 = common_sellers[:10]
     common_sellers_page2 = common_sellers[10:20]
 
-    # ② 오른쪽 — 공구 인기 브랜드·제품 TOP10 (5개 플랫폼 통합, 카테고리 구분 없음)
-    top_brand_products = _top_brand_products(all_seller_rows)
+    # ② 오른쪽 — 공구 인기 브랜드·제품 TOP10 (이번 달에 등록된 기록만 집계)
+    current_month = date.today().strftime("%Y-%m")
+    current_month_label = f"{date.today().month}월"
+    top_brand_products = _top_brand_products(records, current_month)
 
     return render_template(
         "trend.html",
@@ -146,7 +152,7 @@ def index():
         records=records, groups=groups, group_summaries=group_summaries,
         platform_sellers=platform_sellers, platform_seller_cap=PLATFORM_SELLER_CAP,
         common_sellers_page1=common_sellers_page1, common_sellers_page2=common_sellers_page2,
-        top_brand_products=top_brand_products,
+        top_brand_products=top_brand_products, current_month_label=current_month_label,
     )
 
 

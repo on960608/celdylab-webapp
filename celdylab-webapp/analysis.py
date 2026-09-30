@@ -904,39 +904,63 @@ def fetch_naver_shopping_insight(category_code, category_name="", months=1):
 
 
 def _fetch_naver_shopping_insight_live(category_code, category_name="", months=1):
+    """
+    2026-09-30: 예전에는 이 11번의 네이버 요청(추이1 + 기기2 + 성별2 + 연령6)을 하나씩
+    순서대로(직렬로) 물어봤어요. 그래서 하나당 1~수초씩 걸리면 다 더해져서 카테고리를
+    바꿀 때마다 화면이 한참 멈춘 것처럼 느껴졌어요(15분 캐시는 "같은 분야를 다시 볼 때"만
+    도움이 되고, 새 분야를 처음 열 때는 그대로 다 기다려야 했어요).
+    지금은 11개를 한 번에 동시에 보내고, 다 같이 기다려요 — 가장 늦게 끝나는 요청 1개
+    시간만큼만 기다리면 되니 훨씬 빨라져요. (네이버 서버 쪽에 결과가 바뀌는 건 아니고,
+    순서대로 물어보던 걸 동시에 물어보는 것으로만 바꾼 거라 안전해요.)
+    """
+    import concurrent.futures
+
     start_date, end_date = _naver_shopping_date_range(months)
     time_unit = "date" if months <= 1 else "week"
 
-    trend, err = _naver_shopping_category_call(category_code, category_name, start_date, end_date, time_unit)
-    if err:
-        return {"trend": [], "device": [], "gender": [], "age": [], "error": err}
-
-    device_pairs = []
-    for label, code in (("PC", "pc"), ("모바일", "mo")):
-        pts, e = _naver_shopping_category_call(category_code, category_name, start_date, end_date, time_unit, device=code)
-        if e:
-            return {"trend": trend, "device": [], "gender": [], "age": [], "error": e}
-        device_pairs.append((label, _avg_ratio(pts)))
-
-    gender_pairs = []
-    for label, code in (("여성", "f"), ("남성", "m")):
-        pts, e = _naver_shopping_category_call(category_code, category_name, start_date, end_date, time_unit, gender=code)
-        if e:
-            return {"trend": trend, "device": _shares_from_averages(device_pairs), "gender": [], "age": [], "error": e}
-        gender_pairs.append((label, _avg_ratio(pts)))
-
-    age_pairs = []
+    specs = [
+        {"label": None, "device": "", "gender": "", "ages": None},
+        {"label": "PC", "device": "pc", "gender": "", "ages": None},
+        {"label": "모바일", "device": "mo", "gender": "", "ages": None},
+        {"label": "여성", "device": "", "gender": "f", "ages": None},
+        {"label": "남성", "device": "", "gender": "m", "ages": None},
+    ]
     for label, codes in NAVER_SHOPPING_AGE_GROUPS:
-        pts, e = _naver_shopping_category_call(category_code, category_name, start_date, end_date, time_unit, ages=codes)
-        if e:
-            return {
-                "trend": trend, "device": _shares_from_averages(device_pairs),
-                "gender": _shares_from_averages(gender_pairs), "age": [], "error": e,
-            }
-        age_pairs.append((label, _avg_ratio(pts)))
+        specs.append({"label": label, "device": "", "gender": "", "ages": codes})
+
+    def _run(spec):
+        return _naver_shopping_category_call(
+            category_code, category_name, start_date, end_date, time_unit,
+            device=spec["device"], gender=spec["gender"], ages=spec["ages"],
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(specs)) as pool:
+        outcomes = list(pool.map(_run, specs))  # specs와 같은 순서로 결과가 나와요
+
+    trend_pts, trend_err = outcomes[0]
+    if trend_err:
+        return {"trend": [], "device": [], "gender": [], "age": [], "error": trend_err}
+
+    device_err = next((e for _, e in outcomes[1:3] if e), None)
+    if device_err:
+        return {"trend": trend_pts, "device": [], "gender": [], "age": [], "error": device_err}
+    device_pairs = [(specs[i]["label"], _avg_ratio(outcomes[i][0])) for i in (1, 2)]
+
+    gender_err = next((e for _, e in outcomes[3:5] if e), None)
+    if gender_err:
+        return {"trend": trend_pts, "device": _shares_from_averages(device_pairs), "gender": [], "age": [], "error": gender_err}
+    gender_pairs = [(specs[i]["label"], _avg_ratio(outcomes[i][0])) for i in (3, 4)]
+
+    age_err = next((e for _, e in outcomes[5:] if e), None)
+    if age_err:
+        return {
+            "trend": trend_pts, "device": _shares_from_averages(device_pairs),
+            "gender": _shares_from_averages(gender_pairs), "age": [], "error": age_err,
+        }
+    age_pairs = [(specs[i]["label"], _avg_ratio(outcomes[i][0])) for i in range(5, len(specs))]
 
     return {
-        "trend": trend,
+        "trend": trend_pts,
         "device": _shares_from_averages(device_pairs),
         "gender": _shares_from_averages(gender_pairs),
         "age": _shares_from_averages(age_pairs),
