@@ -308,6 +308,17 @@ function schClosePanel() {
   document.getElementById('schBackdrop').classList.remove('open');
 }
 
+function schSyncEndMin() {
+  const startEl = document.getElementById('schFStart');
+  const endEl = document.getElementById('schFEnd');
+  if (!startEl.value) return;
+  endEl.min = startEl.value;
+  if (!endEl.value || endEl.value < startEl.value) {
+    endEl.value = startEl.value;
+  }
+}
+document.getElementById('schFStart').addEventListener('change', schSyncEndMin);
+
 function schOpenCreate() {
   schCurrentSchedule = null;
   document.getElementById('schPanelTitle').textContent = '일정 추가';
@@ -319,6 +330,7 @@ function schOpenCreate() {
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('schFStart').value = today;
   document.getElementById('schFEnd').value = today;
+  schSyncEndMin();
   schPanelOpen();
 }
 
@@ -337,6 +349,7 @@ function schOpenEdit() {
   document.getElementById('schFDesc').value = s.description || '';
   document.getElementById('schFStart').value = s.start_date;
   document.getElementById('schFEnd').value = s.end_date;
+  schSyncEndMin();
   document.getElementById('schFStartTime').value = s.start_time || '';
   document.getElementById('schFEndTime').value = s.end_time || '';
   document.getElementById('schFStatus').value = s.status;
