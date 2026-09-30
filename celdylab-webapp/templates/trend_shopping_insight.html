@@ -69,8 +69,8 @@
 
   <div class="chart-svg-wrap">
     <table class="data-table">
-      <thead><tr><th>순위</th><th>키워드</th><th>전날 대비</th><th>7일 전 대비</th><th>상품군에 추가</th></tr></thead>
-      <tbody>
+      <thead><tr><th>순위</th><th>키워드</th><th>전날 대비</th><th>2주 전 대비</th><th>한달 전 대비</th><th>상품군에 추가</th></tr></thead>
+      <tbody id="rank-tbody" data-paginate="20" data-pager="rank-pager" data-pager-unit="위">
         {% for r in rank_table.rows %}
         <tr>
           <td>{{ r.rank }}</td>
@@ -84,10 +84,17 @@
             {% else %}-{% endif %}
           </td>
           <td>
-            {% if not rank_table.has_seven %}-
-            {% elif r.change_7d is none %}NEW
-            {% elif r.change_7d > 0 %}▲{{ r.change_7d }}
-            {% elif r.change_7d < 0 %}▼{{ -r.change_7d }}
+            {% if not rank_table.has_2w %}-
+            {% elif r.change_2w is none %}NEW
+            {% elif r.change_2w > 0 %}▲{{ r.change_2w }}
+            {% elif r.change_2w < 0 %}▼{{ -r.change_2w }}
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            {% if not rank_table.has_1m %}-
+            {% elif r.change_1m is none %}NEW
+            {% elif r.change_1m > 0 %}▲{{ r.change_1m }}
+            {% elif r.change_1m < 0 %}▼{{ -r.change_1m }}
             {% else %}-{% endif %}
           </td>
           <td>
@@ -108,6 +115,7 @@
       </tbody>
     </table>
   </div>
+  <div id="rank-pager" style="display:flex;align-items:center;gap:10px;margin-top:10px"></div>
 
   {% if rank_table.has_previous %}
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
@@ -240,4 +248,50 @@
     ⓘ 기기·성별·연령 비중은 네이버 공식 API로 각각 따로 조회한 값을 평균 내어 다시 100%로 맞춘 <b>추정치</b>예요. 데이터랩 화면에 나오는 실제 클릭 비중과 완전히 같은 숫자는 아닐 수 있어요.
   </p>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var tbody = document.getElementById('rank-tbody');
+  if (!tbody) return;
+  var pageSize = parseInt(tbody.getAttribute('data-paginate'), 10) || 20;
+  var unit = tbody.getAttribute('data-pager-unit') || '';
+  var rows = Array.prototype.filter.call(tbody.children, function (el) { return el.tagName === 'TR'; });
+  var pager = document.getElementById(tbody.getAttribute('data-pager'));
+  if (!rows.length || rows.length <= pageSize) { return; }
+  var pageCount = Math.ceil(rows.length / pageSize);
+  var current = 1;
+
+  function showPage(n) {
+    current = n;
+    rows.forEach(function (row, i) {
+      row.style.display = (i >= (n - 1) * pageSize && i < n * pageSize) ? '' : 'none';
+    });
+    var start = (n - 1) * pageSize + 1;
+    var end = Math.min(n * pageSize, rows.length);
+    label.textContent = start + '-' + end + unit;
+    prevBtn.disabled = (n === 1);
+    nextBtn.disabled = (n === pageCount);
+  }
+
+  var prevBtn = document.createElement('button');
+  prevBtn.type = 'button';
+  prevBtn.className = 'refresh-btn';
+  prevBtn.textContent = '‹ 이전 20개';
+  prevBtn.addEventListener('click', function () { if (current > 1) showPage(current - 1); });
+
+  var label = document.createElement('b');
+  label.style.fontSize = '13px';
+
+  var nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
+  nextBtn.className = 'refresh-btn';
+  nextBtn.textContent = '다음 20개 ›';
+  nextBtn.addEventListener('click', function () { if (current < pageCount) showPage(current + 1); });
+
+  pager.appendChild(prevBtn);
+  pager.appendChild(label);
+  pager.appendChild(nextBtn);
+  showPage(1);
+});
+</script>
 {% endblock %}
