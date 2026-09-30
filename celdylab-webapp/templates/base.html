@@ -18,7 +18,11 @@
     <div class="nav-label">매출 기회 발굴</div>
     <nav class="nav-group">
       <a class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('dashboard.') else '' }}" href="{{ url_for('dashboard.index') }}">매출 기회 대시보드</a>
-      <a class="nav-link {{ 'active' if request.endpoint == 'products.index' else '' }}" href="{{ url_for('products.index') }}">자사 제품 정보</a>
+    </nav>
+
+    <div class="nav-label">스케줄링</div>
+    <nav class="nav-group">
+      <a class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('schedule.') else '' }}" href="{{ url_for('schedule.index') }}">스케줄링</a>
     </nav>
 
     <div class="nav-label">시딩</div>
