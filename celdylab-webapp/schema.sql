@@ -337,3 +337,53 @@ CREATE TABLE IF NOT EXISTS giveaway_winners (
   comment_text TEXT NOT NULL DEFAULT '',
   keyword_matched INTEGER  -- 1=포함 / 0=미포함 / NULL=일반 댓글 이벤트(해당없음)
 );
+
+-- ---------------------------------------------------------------------------
+-- 스케줄링 (시딩·공동구매 팀 업무 캘린더)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL DEFAULT '시딩',            -- '시딩' | '공구'
+  title TEXT NOT NULL,                           -- 업무명
+  brand TEXT NOT NULL DEFAULT '',
+  product TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  start_date TEXT NOT NULL,                      -- YYYY-MM-DD
+  end_date TEXT NOT NULL,                        -- YYYY-MM-DD
+  start_time TEXT NOT NULL DEFAULT '',            -- HH:MM (선택)
+  end_time TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT '예정',           -- 예정 / 진행중 / 확인 필요 / 완료
+  priority TEXT NOT NULL DEFAULT '일반',         -- 일반 / 중요 / 긴급
+  group_id INTEGER REFERENCES trend_keyword_groups(id) ON DELETE SET NULL,  -- 관련 상품군(선택)
+  memo TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS schedule_assignees (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  schedule_id INTEGER NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'assignee',   -- 'assignee'(담당자) | 'participant'(참여자)
+  UNIQUE(schedule_id, employee_id, role)
+);
+
+CREATE TABLE IF NOT EXISTS schedule_tasks (            -- 업무 체크리스트
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  schedule_id INTEGER NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  assignee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+  due_date TEXT NOT NULL DEFAULT '',
+  completed INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS schedule_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  schedule_id INTEGER NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);

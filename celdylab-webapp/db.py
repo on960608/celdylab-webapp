@@ -1253,3 +1253,221 @@ def save_opportunity_weights(trend_w, seeding_w, gongu_w, fit_w, updated_by):
     )
     conn.commit()
     conn.close()
+
+
+# ---------- 스케줄링 (시딩·공동구매 팀 업무 캘린더) ----------
+
+def _schedule_row_to_dict(row):
+    d = dict(row)
+    return d
+
+
+def list_schedules_for_range(start_date, end_date):
+    """start_date~end_date 기간과 겹치는 일정을 전부 가져와요(월간 캘린더가 화면에 그리는 만큼).
+    담당자/참여자 이름까지 한 번에 붙여서 반환하니, 화면에서는 추가 조회 없이 필터링만 하면 돼요."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT * FROM schedules
+           WHERE start_date <= ? AND end_date >= ?
+           ORDER BY start_date, start_time""",
+        (end_date, start_date),
+    ).fetchall()
+    schedules = [_schedule_row_to_dict(r) for r in rows]
+    ids = [s["id"] for s in schedules]
+    assignees_by_schedule = {}
+    if ids:
+        placeholders = ",".join("?" * len(ids))
+        for r in conn.execute(
+            f"""SELECT sa.schedule_id, sa.role, e.id AS employee_id, e.name
+                FROM schedule_assignees sa JOIN employees e ON e.id = sa.employee_id
+                WHERE sa.schedule_id IN ({placeholders}) ORDER BY e.name""",
+            ids,
+        ).fetchall():
+            assignees_by_schedule.setdefault(r["schedule_id"], []).append(
+                {"employee_id": r["employee_id"], "name": r["name"], "role": r["role"]}
+            )
+    conn.close()
+    for s in schedules:
+        all_people = assignees_by_schedule.get(s["id"], [])
+        s["assignees"] = [p for p in all_people if p["role"] == "assignee"]
+        s["participants"] = [p for p in all_people if p["role"] == "participant"]
+    return schedules
+
+
+def get_schedule(schedule_id):
+    """일정 1건 + 담당자/참여자/체크리스트/코멘트까지 한 번에 묶어서 반환해요."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM schedules WHERE id = ?", (schedule_id,)).fetchone()
+    if not row:
+        conn.close()
+        return None
+    data = _schedule_row_to_dict(row)
+
+    people = conn.execute(
+        """SELECT sa.role, e.id AS employee_id, e.name
+           FROM schedule_assignees sa JOIN employees e ON e.id = sa.employee_id
+           WHERE sa.schedule_id = ? ORDER BY e.name""",
+        (schedule_id,),
+    ).fetchall()
+    data["assignees"] = [{"employee_id": p["employee_id"], "name": p["name"]} for p in people if p["role"] == "assignee"]
+    data["participants"] = [{"employee_id": p["employee_id"], "name": p["name"]} for p in people if p["role"] == "participant"]
+
+    tasks = conn.execute(
+        """SELECT t.*, e.name AS assignee_name
+           FROM schedule_tasks t LEFT JOIN employees e ON e.id = t.assignee_id
+           WHERE t.schedule_id = ? ORDER BY t.sort_order, t.id""",
+        (schedule_id,),
+    ).fetchall()
+    data["tasks"] = [dict(t) for t in tasks]
+
+    comments = conn.execute(
+        """SELECT c.*, e.name AS employee_name
+           FROM schedule_comments c JOIN employees e ON e.id = c.employee_id
+           WHERE c.schedule_id = ? ORDER BY c.id""",
+        (schedule_id,),
+    ).fetchall()
+    data["comments"] = [dict(c) for c in comments]
+
+    if data.get("group_id"):
+        g = conn.execute("SELECT id, name FROM trend_keyword_groups WHERE id = ?", (data["group_id"],)).fetchone()
+        data["group"] = dict(g) if g else None
+    else:
+        data["group"] = None
+
+    conn.close()
+    return data
+
+
+def create_schedule(fields, created_by):
+    conn = get_conn()
+    now = now_iso()
+    cur = conn.execute(
+        """INSERT INTO schedules
+           (type, title, brand, product, description, start_date, end_date, start_time, end_time,
+            status, priority, group_id, memo, created_by, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            fields["type"], fields["title"], fields["brand"], fields["product"], fields["description"],
+            fields["start_date"], fields["end_date"], fields["start_time"], fields["end_time"],
+            fields["status"], fields["priority"], fields["group_id"], fields["memo"],
+            created_by, now, now,
+        ),
+    )
+    schedule_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return schedule_id
+
+
+def update_schedule(schedule_id, fields):
+    conn = get_conn()
+    conn.execute(
+        """UPDATE schedules SET
+             type=?, title=?, brand=?, product=?, description=?, start_date=?, end_date=?,
+             start_time=?, end_time=?, status=?, priority=?, group_id=?, memo=?, updated_at=?
+           WHERE id = ?""",
+        (
+            fields["type"], fields["title"], fields["brand"], fields["product"], fields["description"],
+            fields["start_date"], fields["end_date"], fields["start_time"], fields["end_time"],
+            fields["status"], fields["priority"], fields["group_id"], fields["memo"], now_iso(),
+            schedule_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_schedule_status(schedule_id, status):
+    conn = get_conn()
+    conn.execute("UPDATE schedules SET status = ?, updated_at = ? WHERE id = ?", (status, now_iso(), schedule_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_schedule(schedule_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
+    conn.commit()
+    conn.close()
+
+
+def set_schedule_assignees(schedule_id, assignee_ids, participant_ids):
+    """담당자/참여자 목록을 통째로 교체해요(기존 걸 지우고 새로 넣는 방식이라 순서 걱정 없어요)."""
+    conn = get_conn()
+    conn.execute("DELETE FROM schedule_assignees WHERE schedule_id = ?", (schedule_id,))
+    for emp_id in dict.fromkeys(assignee_ids or []):
+        conn.execute(
+            "INSERT OR IGNORE INTO schedule_assignees (schedule_id, employee_id, role) VALUES (?, ?, 'assignee')",
+            (schedule_id, emp_id),
+        )
+    for emp_id in dict.fromkeys(participant_ids or []):
+        if emp_id in (assignee_ids or []):
+            continue
+        conn.execute(
+            "INSERT OR IGNORE INTO schedule_assignees (schedule_id, employee_id, role) VALUES (?, ?, 'participant')",
+            (schedule_id, emp_id),
+        )
+    conn.commit()
+    conn.close()
+
+
+def add_schedule_task(schedule_id, title, assignee_id=None, due_date="", sort_order=0):
+    conn = get_conn()
+    cur = conn.execute(
+        """INSERT INTO schedule_tasks (schedule_id, title, assignee_id, due_date, completed, sort_order, created_at)
+           VALUES (?, ?, ?, ?, 0, ?, ?)""",
+        (schedule_id, title, assignee_id, due_date, sort_order, now_iso()),
+    )
+    task_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return task_id
+
+
+def toggle_schedule_task(task_id):
+    conn = get_conn()
+    row = conn.execute("SELECT completed FROM schedule_tasks WHERE id = ?", (task_id,)).fetchone()
+    if row:
+        conn.execute("UPDATE schedule_tasks SET completed = ? WHERE id = ?", (0 if row["completed"] else 1, task_id))
+        conn.commit()
+    conn.close()
+
+
+def delete_schedule_task(task_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM schedule_tasks WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_schedule_task(task_id):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM schedule_tasks WHERE id = ?", (task_id,)).fetchone()
+    conn.close()
+    return row
+
+
+def add_schedule_comment(schedule_id, employee_id, content):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO schedule_comments (schedule_id, employee_id, content, created_at) VALUES (?, ?, ?, ?)",
+        (schedule_id, employee_id, content, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_today_tasks(today_str, employee_id=None):
+    """'오늘 해야 할 업무' 위젯용 — 오늘이 마감일인 미완료 체크리스트 항목(담당자 필터 가능)."""
+    conn = get_conn()
+    q = """SELECT t.*, s.title AS schedule_title, s.type AS schedule_type, s.id AS schedule_id
+           FROM schedule_tasks t JOIN schedules s ON s.id = t.schedule_id
+           WHERE t.completed = 0 AND t.due_date = ?"""
+    params = [today_str]
+    if employee_id:
+        q += " AND t.assignee_id = ?"
+        params.append(employee_id)
+    q += " ORDER BY s.priority = '긴급' DESC, s.priority = '중요' DESC, t.id"
+    rows = conn.execute(q, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
