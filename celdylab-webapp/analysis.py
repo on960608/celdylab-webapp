@@ -2,6 +2,7 @@
 시딩 인사이트 / 공구 성과 / 리스트업 판정에서 공통으로 쓰는 계산식.
 기존 오프라인 트래커(seeding-gongu-tracker.html)의 자바스크립트 공식을 그대로 옮겼어요.
 """
+import time
 from datetime import date, datetime
 
 BRANDS = ["코드니처", "빠이러스", "라이프스타일마트"]
@@ -870,6 +871,14 @@ def _shares_from_averages(pairs):
     return [{"label": label, "pct": round(v / total * 100, 1)} for label, v in pairs]
 
 
+# 2026-09-29: 이 화면 하나를 열 때마다 네이버에 11번(추이1 + 기기2 + 성별2 + 연령6)을 순서대로
+# 물어봐서 로딩이 오래 걸렸어요(그동안 서버가 다른 페이지 요청도 못 받아서 전체 앱이 같이 멈춘
+# 것처럼 느껴졌어요 — Procfile의 gunicorn 워커 수도 함께 늘려서 해결했어요). 같은 분야·기간 조합은
+# 15분 안에 다시 열면 네이버에 새로 묻지 않고 방금 받아온 값을 그대로 재사용해요.
+_SHOPPING_INSIGHT_CACHE = {}
+_SHOPPING_INSIGHT_CACHE_TTL = 900  # 15분
+
+
 def fetch_naver_shopping_insight(category_code, category_name="", months=1):
     """
     네이버 쇼핑인사이트 분야 화면(생활/건강 등)의 클릭량 추이 + 기기·성별·연령별 비중을
@@ -881,7 +890,20 @@ def fetch_naver_shopping_insight(category_code, category_name="", months=1):
       "age": [{"label": "10대", "pct": ...}, ...] 또는 [],
       "error": None 또는 안내 문구,
     }
+    성공한 결과만 15분간 캐시해요(실패는 캐시하지 않아서, 일시적인 오류가 15분 내내 남지 않아요).
     """
+    cache_key = (category_code, months)
+    cached = _SHOPPING_INSIGHT_CACHE.get(cache_key)
+    if cached and (time.time() - cached[0]) < _SHOPPING_INSIGHT_CACHE_TTL:
+        return cached[1]
+
+    result = _fetch_naver_shopping_insight_live(category_code, category_name, months)
+    if result["error"] is None:
+        _SHOPPING_INSIGHT_CACHE[cache_key] = (time.time(), result)
+    return result
+
+
+def _fetch_naver_shopping_insight_live(category_code, category_name="", months=1):
     start_date, end_date = _naver_shopping_date_range(months)
     time_unit = "date" if months <= 1 else "week"
 
