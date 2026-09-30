@@ -93,7 +93,7 @@
       {% for week in weeks %}
       <div class="sch-week">
         <div class="sch-col-guides">{% for _ in range(7) %}<div></div>{% endfor %}</div>
-        <div class="sch-week-grid" style="grid-template-rows:22px repeat({{ week.lane_count }}, 22px)">
+        <div class="sch-week-grid" style="grid-template-rows:24px repeat({{ week.lane_count }}, 28px)">
           {% for d in week.days %}
           <div class="sch-daynum {{ 'is-other' if d.is_other_month else '' }}" style="grid-column:{{ loop.index }};grid-row:1">
             {% if d.is_today %}<span class="sch-today-dot">{{ d.day }}</span>{% else %}{{ d.day }}{% if d.show_month_label and not d.is_other_month %}<span class="note" style="margin-left:3px">{{ month }}월</span>{% endif %}{% endif %}
@@ -184,7 +184,8 @@
 </aside>
 
 <style>
-.sch-layout { display:grid; grid-template-columns:210px 1fr; gap:16px; align-items:start; }
+.page-pad:has(.sch-layout) { max-width:1180px; }
+.sch-layout { display:grid; grid-template-columns:188px 1fr; gap:16px; align-items:start; }
 @media (max-width:860px) { .sch-layout { grid-template-columns:1fr; } }
 .sch-side { display:grid; gap:14px; }
 .sch-mini-head { display:flex; align-items:center; justify-content:space-between; font-size:12.5px; margin-bottom:8px; }
@@ -202,7 +203,7 @@
 .sch-people-chip { font-family:inherit; cursor:pointer; border:1px solid var(--line2); background:var(--panel); color:var(--muted); font-size:12px; font-weight:700; padding:5px 11px; border-radius:999px; }
 .sch-people-chip.is-active { background:var(--accent-soft); color:var(--accent-deep); border-color:transparent; }
 
-.sch-main { padding:22px 22px 16px; }
+.sch-main { padding:22px 16px 16px; }
 .sch-main-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
 .sch-main-head h3 { font-size:16px; }
 .sch-weekday-row { display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:11px; font-weight:800; color:var(--muted2); padding-bottom:6px; border-bottom:1px solid var(--line); margin-bottom:4px; }
@@ -213,10 +214,10 @@
 .sch-col-guides > div { border-right:1px solid var(--line); }
 .sch-col-guides > div:last-child { border-right:none; }
 .sch-week-grid { position:relative; z-index:1; display:grid; grid-template-columns:repeat(7,1fr); row-gap:3px; }
-.sch-daynum { font-size:11px; font-weight:700; color:var(--muted2); padding:2px 6px; }
+.sch-daynum { font-size:11.5px; font-weight:700; color:var(--muted2); padding:3px 6px; }
 .sch-daynum.is-other { opacity:.4; }
 .sch-today-dot { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:var(--accent); color:#fff; }
-.sch-bar { margin:0 3px; padding:2px 8px; border-radius:6px; border:1px solid; font-size:11.5px; font-weight:700; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sch-bar { margin:0 3px; padding:0 9px; height:100%; box-sizing:border-box; border-radius:6px; border:1px solid; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; }
 .sch-bar.cont-left { border-top-left-radius:0; border-bottom-left-radius:0; margin-left:0; }
 .sch-bar.cont-right { border-top-right-radius:0; border-bottom-right-radius:0; margin-right:0; }
 .sch-bar[data-hidden="1"] { display:none; }
