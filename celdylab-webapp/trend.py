@@ -350,7 +350,6 @@ def shopping_insight():
     result = fetch_naver_shopping_insight(category_code, category_name, months)
 
     trend_points, trend_w, trend_h = trend_sparkline_points(result["trend"])
-    device_chart = donut_chart(result["device"]) if result["device"] else None
     gender_chart = donut_chart(result["gender"]) if result["gender"] else None
     age_chart = donut_chart(result["age"]) if result["age"] else None
 
@@ -380,7 +379,7 @@ def shopping_insight():
         categories=NAVER_SHOPPING_CATEGORIES, category_code=category_code, category_name=category_name,
         months=months, error=result["error"],
         trend=result["trend"], trend_points=trend_points, trend_w=trend_w, trend_h=trend_h,
-        device_chart=device_chart, gender_chart=gender_chart, age_chart=age_chart,
+        gender_chart=gender_chart, age_chart=age_chart,
         rank_categories=NAVER_RANK_CATEGORIES, rank_cid=rank_cid, rank_category_name=rank_category_name,
         rank_gender=rank_gender, rank_ages=rank_ages, rank_age_options=NAVER_RANK_AGE_OPTIONS,
         rank_date=rank_date, rank_available_dates=rank_available_dates, today_str=date.today().isoformat(),
@@ -461,18 +460,30 @@ def _build_rank_table(cid, category_name, gender, ages, selected_date=None):
         c["change_1m"] = None if old_1m is None else old_1m - c["rank"]
 
     has_previous = bool(prev_rows)
+    has_2w = bool(two_week_rows)
+    has_1m = bool(month_rows)
     new_keywords = [c for c in changes if c["is_new"]] if has_previous else []
     risers = sorted([c for c in changes if c["change"] and c["change"] > 0], key=lambda c: -c["change"])[:10]
+    # 2주/한달 전 대비도 "새로 들어온 키워드"/"많이 오른 키워드"를 똑같이 볼 수 있게 만든다.
+    # (그날 전날 데이터가 없어도 2주/한달 데이터만 있으면 그 기준으로는 볼 수 있다)
+    new_keywords_2w = [c for c in changes if c["change_2w"] is None] if has_2w else []
+    risers_2w = sorted([c for c in changes if c["change_2w"] and c["change_2w"] > 0], key=lambda c: -c["change_2w"])[:10]
+    new_keywords_1m = [c for c in changes if c["change_1m"] is None] if has_1m else []
+    risers_1m = sorted([c for c in changes if c["change_1m"] and c["change_1m"] > 0], key=lambda c: -c["change_1m"])[:10]
 
     return {
         "collected_date": latest_date,
         "period_range": period_range,
         "rows": changes,
         "has_previous": has_previous,
-        "has_2w": bool(two_week_rows),
-        "has_1m": bool(month_rows),
+        "has_2w": has_2w,
+        "has_1m": has_1m,
         "new_keywords": new_keywords[:10],
         "risers": risers,
+        "new_keywords_2w": new_keywords_2w[:10],
+        "risers_2w": risers_2w,
+        "new_keywords_1m": new_keywords_1m[:10],
+        "risers_1m": risers_1m,
         "is_stale": (not is_history_view) and latest_date != today,
         "is_history_view": is_history_view,
     }, error
