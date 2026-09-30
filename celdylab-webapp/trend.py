@@ -364,8 +364,16 @@ def shopping_insight():
         rank_gender = ""
     rank_ages = [a for a in request.args.getlist("rank_age") if a in NAVER_RANK_AGE_OPTIONS]
 
-    rank_table, rank_error = _build_rank_table(rank_cid, rank_category_name, rank_gender, rank_ages)
+    rank_date = request.args.get("rank_date") or ""
+    if rank_date:
+        try:
+            date.fromisoformat(rank_date)
+        except ValueError:
+            rank_date = ""
+
+    rank_table, rank_error = _build_rank_table(rank_cid, rank_category_name, rank_gender, rank_ages, rank_date or None)
     last_log = db.get_last_naver_rank_log()
+    rank_available_dates = db.list_naver_rank_dates(rank_cid, rank_gender, ",".join(rank_ages), limit=30)
 
     return render_template(
         "trend_shopping_insight.html",
@@ -375,6 +383,7 @@ def shopping_insight():
         device_chart=device_chart, gender_chart=gender_chart, age_chart=age_chart,
         rank_categories=NAVER_RANK_CATEGORIES, rank_cid=rank_cid, rank_category_name=rank_category_name,
         rank_gender=rank_gender, rank_ages=rank_ages, rank_age_options=NAVER_RANK_AGE_OPTIONS,
+        rank_date=rank_date, rank_available_dates=rank_available_dates, today_str=date.today().isoformat(),
         rank_table=rank_table, rank_error=rank_error, rank_last_log=dict(last_log) if last_log else None,
         rank_is_default=(rank_cid == NAVER_RANK_DEFAULT_CID and rank_gender == "" and not rank_ages),
         trend_groups=db.list_trend_groups(),
@@ -394,29 +403,39 @@ def _collect_and_store(cid, category_name, gender="", ages=()):
     return True, result["range"]
 
 
-def _build_rank_table(cid, category_name, gender, ages):
-    """오늘치 순위 + 전날/2주 전/한달 전 대비를 화면에 뿌릴 형태로 만든다.
-    오늘 이 조합을 아직 못 모았으면 지금 바로 한 번 가져와서 그날치로 저장한다 (doc 02의 "나머지는
-    화면에서 고를 때 가져와서 그날 하루 저장" 규칙). 실패하면 마지막으로 성공한 데이터를 대신 보여준다.
+def _build_rank_table(cid, category_name, gender, ages, selected_date=None):
+    """오늘치(또는 고른 날짜의) 순위 + 전날/2주 전/한달 전 대비를 화면에 뿌릴 형태로 만든다.
+    selected_date가 없으면: 오늘 이 조합을 아직 못 모았으면 지금 바로 한 번 가져와서 그날치로 저장한다
+    (doc 02의 "나머지는 화면에서 고를 때 가져와서 그날 하루 저장" 규칙). 실패하면 마지막으로 성공한
+    데이터를 대신 보여준다.
+    selected_date가 있으면: 그 날짜에 이미 모아둔 기록만 보여준다(과거를 보는 중이므로 새로 수집하지
+    않음). 그 날짜에 기록이 없으면 (None, None)을 돌려준다.
     지난 날짜 데이터는 절대 지우지 않고 그대로 쌓아두므로(같은 날 재수집만 덮어씀), 시간이 지나도
     이전 달 데이터를 기준으로 비교할 수 있다."""
     age_key = ",".join(ages)
     today = date.today().isoformat()
-    rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, today)]
+    is_history_view = bool(selected_date)
     error = None
 
-    if not rows:
-        ok, info = _collect_and_store(cid, category_name, gender, ages)
-        if ok:
-            rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, today)]
-        else:
-            error = info
-            fallback_dates = db.list_naver_rank_dates(cid, gender, age_key, limit=1)
-            if fallback_dates:
-                rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, fallback_dates[0])]
+    if is_history_view:
+        rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, selected_date)]
+        if not rows:
+            return None, None
+    else:
+        rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, today)]
 
-    if not rows:
-        return None, error
+        if not rows:
+            ok, info = _collect_and_store(cid, category_name, gender, ages)
+            if ok:
+                rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, today)]
+            else:
+                error = info
+                fallback_dates = db.list_naver_rank_dates(cid, gender, age_key, limit=1)
+                if fallback_dates:
+                    rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, fallback_dates[0])]
+
+        if not rows:
+            return None, error
 
     latest_date = rows[0]["collected_date"]
     period_range = rows[0]["period_range"]
@@ -454,7 +473,8 @@ def _build_rank_table(cid, category_name, gender, ages):
         "has_1m": bool(month_rows),
         "new_keywords": new_keywords[:10],
         "risers": risers,
-        "is_stale": latest_date != today,
+        "is_stale": (not is_history_view) and latest_date != today,
+        "is_history_view": is_history_view,
     }, error
 
 
