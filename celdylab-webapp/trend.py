@@ -395,9 +395,11 @@ def _collect_and_store(cid, category_name, gender="", ages=()):
 
 
 def _build_rank_table(cid, category_name, gender, ages):
-    """오늘치 순위 + 전날/7일 전 대비를 화면에 뿌릴 형태로 만든다.
+    """오늘치 순위 + 전날/2주 전/한달 전 대비를 화면에 뿌릴 형태로 만든다.
     오늘 이 조합을 아직 못 모았으면 지금 바로 한 번 가져와서 그날치로 저장한다 (doc 02의 "나머지는
-    화면에서 고를 때 가져와서 그날 하루 저장" 규칙). 실패하면 마지막으로 성공한 데이터를 대신 보여준다."""
+    화면에서 고를 때 가져와서 그날 하루 저장" 규칙). 실패하면 마지막으로 성공한 데이터를 대신 보여준다.
+    지난 날짜 데이터는 절대 지우지 않고 그대로 쌓아두므로(같은 날 재수집만 덮어씀), 시간이 지나도
+    이전 달 데이터를 기준으로 비교할 수 있다."""
     age_key = ",".join(ages)
     today = date.today().isoformat()
     rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, today)]
@@ -418,21 +420,26 @@ def _build_rank_table(cid, category_name, gender, ages):
 
     latest_date = rows[0]["collected_date"]
     period_range = rows[0]["period_range"]
-    known_dates = set(db.list_naver_rank_dates(cid, gender, age_key, limit=60))
+    known_dates = set(db.list_naver_rank_dates(cid, gender, age_key, limit=90))
 
     prev_date = (date.fromisoformat(latest_date) - timedelta(days=1)).isoformat()
-    seven_date = (date.fromisoformat(latest_date) - timedelta(days=7)).isoformat()
+    two_week_date = (date.fromisoformat(latest_date) - timedelta(days=14)).isoformat()
+    month_date = (date.fromisoformat(latest_date) - timedelta(days=30)).isoformat()
     prev_rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, prev_date)] if prev_date in known_dates else []
-    seven_rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, seven_date)] if seven_date in known_dates else []
+    two_week_rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, two_week_date)] if two_week_date in known_dates else []
+    month_rows = [dict(r) for r in db.get_naver_ranks(cid, gender, age_key, month_date)] if month_date in known_dates else []
 
     today_ranks = [{"rank": r["rank"], "keyword": r["keyword"]} for r in rows]
     prev_ranks = [{"rank": r["rank"], "keyword": r["keyword"]} for r in prev_rows]
     changes = naver_rank.rank_changes(today_ranks, prev_ranks)
 
-    seven_before = {r["keyword"]: r["rank"] for r in seven_rows}
+    two_week_before = {r["keyword"]: r["rank"] for r in two_week_rows}
+    month_before = {r["keyword"]: r["rank"] for r in month_rows}
     for c in changes:
-        old7 = seven_before.get(c["keyword"])
-        c["change_7d"] = None if old7 is None else old7 - c["rank"]
+        old_2w = two_week_before.get(c["keyword"])
+        c["change_2w"] = None if old_2w is None else old_2w - c["rank"]
+        old_1m = month_before.get(c["keyword"])
+        c["change_1m"] = None if old_1m is None else old_1m - c["rank"]
 
     has_previous = bool(prev_rows)
     new_keywords = [c for c in changes if c["is_new"]] if has_previous else []
@@ -443,7 +450,8 @@ def _build_rank_table(cid, category_name, gender, ages):
         "period_range": period_range,
         "rows": changes,
         "has_previous": has_previous,
-        "has_seven": bool(seven_rows),
+        "has_2w": bool(two_week_rows),
+        "has_1m": bool(month_rows),
         "new_keywords": new_keywords[:10],
         "risers": risers,
         "is_stale": latest_date != today,
