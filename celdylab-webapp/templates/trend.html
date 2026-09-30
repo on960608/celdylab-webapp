@@ -113,7 +113,7 @@
   </div>
 
   <div class="chart-card">
-    <div class="chart-card-head"><div><h3>공구 인기 브랜드·제품 TOP10</h3><div class="unit">5개 플랫폼 전체 데이터를 통합해서(카테고리 구분 없이) 등록 횟수가 많은 순으로 보여줘요.</div></div></div>
+    <div class="chart-card-head"><div><h3>공구 인기 브랜드·제품 TOP10</h3><div class="unit">이번 달({{ current_month_label }})에 "인기 셀러 등록"으로 기록한 것 중, 브랜드·제품이 겹치는 걸 모아 등록 횟수가 많은 순으로 보여줘요.</div></div></div>
     <div class="chart-svg-wrap">
       <table class="data-table">
         <thead><tr><th>순위</th><th>브랜드</th><th>제품명</th><th>등록 횟수</th><th>확인된 플랫폼 수</th></tr></thead>
@@ -121,7 +121,7 @@
           {% for b in top_brand_products %}
           <tr><td>{{ loop.index }}</td><td>{{ b.brand }}</td><td>{{ b.product }}</td><td>{{ b.count }}회</td><td>{{ b.platform_count }} / {{ platforms|length }}개</td></tr>
           {% else %}
-          <tr><td colspan="5" style="text-align:center;color:var(--muted2);padding:20px 0">인기셀러 등록 시 브랜드·제품을 함께 입력하면 여기에 집계돼요.</td></tr>
+          <tr><td colspan="5" style="text-align:center;color:var(--muted2);padding:20px 0">이번 달에 아래 "인기 셀러 등록"으로 브랜드·제품을 함께 입력한 기록이 없어요. 등록하면 여기에 집계돼요.</td></tr>
           {% endfor %}
         </tbody>
       </table>
