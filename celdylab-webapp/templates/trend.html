@@ -4,11 +4,11 @@
 <div class="block-head">
   <div class="eyebrow">ANALYSIS · EXTERNAL MALL TREND</div>
   <h2>외부몰 트렌드 분석</h2>
-  <p>6개 공구 앱(캘린·82market·위시버니·지금하는공구·인공·공구모아(09more))마다 인기셀러를 등록하면, 여러 플랫폼에 공통으로 등록된 셀러와 많이 공구되는 브랜드·제품 TOP10이 자동으로 집계돼요. <a href="{{ url_for('trend.groups_index') }}">상품군(비슷한 검색어 묶음) 관리 →</a></p>
+  <p>5개 공구 앱(캘린·82market·위시버니·지금하는공구·인공)마다 인기셀러를 등록하면, 여러 플랫폼에 공통으로 등록된 셀러와 많이 공구되는 브랜드·제품 TOP10이 자동으로 집계돼요. <a href="{{ url_for('trend.groups_index') }}">상품군(비슷한 검색어 묶음) 관리 →</a></p>
 </div>
 
 <div class="chart-card" style="margin-bottom:16px">
-  <div class="chart-card-head"><div><h3>모니터링 대상 플랫폼</h3><div class="unit">인플루언서 공동구매(공구)가 활발히 진행되는 6개 채널이에요. 여기서 인기 셀러·제품을 확인한 뒤 위 표에 기록하세요.</div></div></div>
+  <div class="chart-card-head"><div><h3>모니터링 대상 플랫폼</h3><div class="unit">인플루언서 공동구매(공구)가 활발히 진행되는 5개 채널이에요. 여기서 인기 셀러·제품을 확인한 뒤 위 표에 기록하세요.</div></div></div>
   <div class="platform-grid" style="margin-top:10px">
     {% for p in platform_links %}
     <a class="platform-card" href="{{ p.url }}" target="_blank" rel="noopener"><b>{{ p.name }}</b><span>{{ p.desc }}</span></a>
@@ -89,7 +89,7 @@
 
 <div class="block-head">
   <h2 style="font-size:18px">② 통합 분석</h2>
-  <p class="note" style="margin:0">위에서 등록한 6개 플랫폼의 인기셀러 데이터를 통합해서 비교해요.</p>
+  <p class="note" style="margin:0">위에서 등록한 5개 플랫폼의 인기셀러 데이터를 통합해서 비교해요.</p>
 </div>
 <div class="split-2col">
   <div class="chart-card">
@@ -113,7 +113,7 @@
   </div>
 
   <div class="chart-card">
-    <div class="chart-card-head"><div><h3>공구 인기 브랜드·제품 TOP10</h3><div class="unit">6개 플랫폼 전체 데이터를 통합해서(카테고리 구분 없이) 등록 횟수가 많은 순으로 보여줘요.</div></div></div>
+    <div class="chart-card-head"><div><h3>공구 인기 브랜드·제품 TOP10</h3><div class="unit">5개 플랫폼 전체 데이터를 통합해서(카테고리 구분 없이) 등록 횟수가 많은 순으로 보여줘요.</div></div></div>
     <div class="chart-svg-wrap">
       <table class="data-table">
         <thead><tr><th>순위</th><th>브랜드</th><th>제품명</th><th>등록 횟수</th><th>확인된 플랫폼 수</th></tr></thead>
