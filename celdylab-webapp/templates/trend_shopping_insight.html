@@ -4,7 +4,7 @@
 <div class="block-head">
   <div class="eyebrow">ANALYSIS · NAVER SHOPPING INSIGHT</div>
   <h2>네이버 쇼핑인사이트</h2>
-  <p class="note" style="margin:0">네이버 공식 쇼핑인사이트 API로 분야별 클릭 추이와 기기·성별·연령 비중을 바로 확인해요. (실시간 데이터랩 화면을 그대로 가져오는 게 아니라, 공개된 API로 다시 계산한 값이에요 — 아래 안내를 꼭 확인해 주세요)</p>
+  <p class="note" style="margin:0">네이버 공식 쇼핑인사이트 API로 기기·성별·연령 비중을 바로 확인해요. (실시간 데이터랩 화면을 그대로 가져오는 게 아니라, 공개된 API로 다시 계산한 값이에요 — 아래 안내를 꼭 확인해 주세요)</p>
 </div>
 
 <div class="block-head">
@@ -47,15 +47,32 @@
         {% endfor %}
       </div>
     </label>
+    <label>날짜 선택
+      <input type="date" name="rank_date" value="{{ rank_date }}" max="{{ today_str }}" onchange="this.form.submit()">
+    </label>
   </form>
   {% if rank_is_default %}
   <p class="note" style="margin-top:8px">이 조합(생활/건강 · 전체)은 매일 자동으로 모아요.</p>
   {% else %}
   <p class="note" style="margin-top:8px">이 조합은 오늘 본 김에 한 번 가져온 거예요. 매일 자동으로 모으지는 않아요.</p>
   {% endif %}
+  {% if rank_date %}
+  <p class="note" style="margin-top:6px">📅 선택한 날짜({{ rank_date }})의 데이터를 보고 있어요.
+    <a href="{{ url_for('trend.shopping_insight', category=category_code, months=months, rank_cid=rank_cid, rank_gender=rank_gender, rank_age=rank_ages) }}">오늘 데이터로 돌아가기</a>
+  </p>
+  {% endif %}
+  {% if rank_available_dates %}
+  <p class="note" style="margin-top:6px">데이터가 있는 날짜:
+    {% for d in rank_available_dates[:12] %}<a href="{{ url_for('trend.shopping_insight', category=category_code, months=months, rank_cid=rank_cid, rank_gender=rank_gender, rank_age=rank_ages, rank_date=d) }}" {% if d==rank_date %}style="font-weight:800"{% endif %}>{{ d }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+  {% endif %}
 </div>
 
-{% if rank_error and not rank_table %}
+{% if rank_date and not rank_table %}
+<div class="chart-card" style="margin-bottom:16px">
+  <p class="note" style="margin:0">📅 {{ rank_date }}에는 모아둔 데이터가 없어요. 위에서 데이터가 있는 날짜를 골라주세요.</p>
+</div>
+{% elif rank_error and not rank_table %}
 <div class="chart-card" style="margin-bottom:16px">
   <p class="note" style="margin:0">⚠ 순위를 가져오지 못했어요: {{ rank_error }}</p>
 </div>
@@ -64,7 +81,9 @@
   <div class="chart-card-head">
     <div><h3>{{ rank_category_name }} · {{ '여성' if rank_gender=='f' else ('남성' if rank_gender=='m' else '전체') }}{% if rank_ages %} · {{ rank_ages|join(', ') }}대{% endif %}</h3>
     <div class="unit">{{ rank_table.period_range }} 기준 · 수집일 {{ rank_table.collected_date }}{% if rank_table.is_stale %} (오늘 수집이 안 되어 이전 데이터를 보여줘요){% endif %}</div></div>
+    {% if not rank_table.is_history_view %}
     <form method="post" action="{{ url_for('trend.shopping_insight_collect_now') }}"><button class="refresh-btn" type="submit">지금 수집</button></form>
+    {% endif %}
   </div>
 
   <div class="chart-svg-wrap">
@@ -144,7 +163,7 @@
 
 <div class="block-head" style="margin-top:28px">
   <div class="eyebrow">TREND · CLICK VOLUME</div>
-  <h2>분야별 클릭 추이 · 기기·성별·연령 비중</h2>
+  <h2>기기·성별·연령 비중</h2>
 </div>
 
 <div class="chart-card" style="margin-bottom:16px">
@@ -173,17 +192,6 @@
 </div>
 {% endif %}
 
-<div class="chart-card" style="margin-bottom:16px">
-  <div class="chart-card-head"><div><h3>{{ category_name }} · 클릭량 추이</h3><div class="unit">최근 {{ months }}개월간 클릭 관심도 흐름이에요 (구간 내 최고점을 100으로 둔 상대지수).</div></div></div>
-  {% if trend_points %}
-  <svg viewBox="0 0 {{ trend_w }} {{ trend_h }}" width="100%" height="140" preserveAspectRatio="none">
-    <polyline points="{{ trend_points }}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
-  </svg>
-  {% else %}
-  <p class="note" style="margin:0">표시할 데이터가 없어요.</p>
-  {% endif %}
-</div>
-
 <div class="gp-forecast-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
   <div class="chart-card">
     <div class="chart-card-head"><div><h3>기기별 비중</h3><div class="unit">PC / 모바일 추정 비중</div></div></div>
@@ -204,7 +212,7 @@
     {% endif %}
   </div>
 
-  <div class="chart-card">
+  <div class="chart-card" style="display:none">
     <div class="chart-card-head"><div><h3>성별 비중</h3><div class="unit">여성 / 남성 추정 비중</div></div></div>
     {% if gender_chart %}
     <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
@@ -223,7 +231,7 @@
     {% endif %}
   </div>
 
-  <div class="chart-card">
+  <div class="chart-card" style="display:none">
     <div class="chart-card-head"><div><h3>연령별 비중</h3><div class="unit">10대~60대 이상 추정 비중</div></div></div>
     {% if age_chart %}
     <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
