@@ -21,7 +21,7 @@
 {% endif %}
 
 <div class="chart-card" style="margin-bottom:16px">
-  <form method="get" action="{{ url_for('trend.shopping_insight') }}" class="ins-form-grid" style="align-items:end">
+  <form id="rank-filter-form" method="get" action="{{ url_for('trend.shopping_insight') }}" class="ins-form-grid" style="align-items:end">
     <input type="hidden" name="category" value="{{ category_code }}">
     <input type="hidden" name="months" value="{{ months }}">
     <label>분야
@@ -51,6 +51,7 @@
       <input type="date" name="rank_date" value="{{ rank_date }}" max="{{ today_str }}" onchange="this.form.submit()">
     </label>
   </form>
+  <p id="rank-filter-loading" class="note" style="display:none;margin-top:8px">⏳ 이 분야·성별·연령 조합을 오늘 처음 보는 거라 네이버에서 새로 가져오는 중이에요. 몇 초만 기다려 주세요...</p>
   {% if rank_is_default %}
   <p class="note" style="margin-top:8px">이 조합(생활/건강 · 전체)은 매일 자동으로 모아요.</p>
   {% else %}
@@ -67,6 +68,20 @@
   </p>
   {% endif %}
 </div>
+<script>
+(function(){
+  var form = document.getElementById('rank-filter-form');
+  var loading = document.getElementById('rank-filter-loading');
+  if (!form || !loading) return;
+  form.addEventListener('submit', function(){
+    // 날짜만 고를 땐 이미 모아둔 과거 데이터를 그대로 보여주는 거라 새로 가져오지 않는다 -> 안내 문구를 안 띄운다.
+    var dateChanged = document.activeElement && document.activeElement.name === 'rank_date';
+    if (!dateChanged) {
+      loading.style.display = 'block';
+    }
+  });
+})();
+</script>
 
 {% if rank_date and not rank_table %}
 <div class="chart-card" style="margin-bottom:16px">
@@ -136,25 +151,92 @@
   </div>
   <div id="rank-pager" style="display:flex;align-items:center;gap:10px;margin-top:10px"></div>
 
-  {% if rank_table.has_previous %}
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
-    <div class="gp-block">
-      <b>새로 들어온 키워드</b>
-      {% if rank_table.new_keywords %}
-      <p>{% for c in rank_table.new_keywords %}{{ c.rank }}위 {{ c.keyword }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
-      {% else %}<p class="note">없어요.</p>{% endif %}
+  {% if rank_table.has_previous or rank_table.has_2w or rank_table.has_1m %}
+  <div style="margin-top:16px">
+    <div class="tab-toggle" id="newriser-tabs">
+      <button type="button" class="is-active" data-period="d">전날 대비</button>
+      <button type="button" data-period="2w">2주 대비</button>
+      <button type="button" data-period="1m">한달 대비</button>
     </div>
-    <div class="gp-block">
-      <b>많이 오른 키워드</b>
-      {% if rank_table.risers %}
-      <p>{% for c in rank_table.risers %}{{ c.keyword }} ▲{{ c.change }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
-      {% else %}<p class="note">없어요.</p>{% endif %}
+
+    <div id="newriser-d" class="newriser-panel" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px">
+      {% if rank_table.has_previous %}
+      <div class="gp-block">
+        <b>새로 들어온 키워드</b>
+        {% if rank_table.new_keywords %}
+        <p>{% for c in rank_table.new_keywords %}{{ c.rank }}위 {{ c.keyword }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+        {% else %}<p class="note">없어요.</p>{% endif %}
+      </div>
+      <div class="gp-block">
+        <b>많이 오른 키워드</b>
+        {% if rank_table.risers %}
+        <p>{% for c in rank_table.risers %}{{ c.keyword }} ▲{{ c.change }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+        {% else %}<p class="note">없어요.</p>{% endif %}
+      </div>
+      {% else %}
+      <p class="note" style="grid-column:1/-1">전날 데이터가 아직 없어서 변화는 다음 날부터 보여요.</p>
+      {% endif %}
+    </div>
+
+    <div id="newriser-2w" class="newriser-panel" style="display:none;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px">
+      {% if rank_table.has_2w %}
+      <div class="gp-block">
+        <b>새로 들어온 키워드 (2주 전 대비)</b>
+        {% if rank_table.new_keywords_2w %}
+        <p>{% for c in rank_table.new_keywords_2w %}{{ c.rank }}위 {{ c.keyword }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+        {% else %}<p class="note">없어요.</p>{% endif %}
+      </div>
+      <div class="gp-block">
+        <b>많이 오른 키워드 (2주 전 대비)</b>
+        {% if rank_table.risers_2w %}
+        <p>{% for c in rank_table.risers_2w %}{{ c.keyword }} ▲{{ c.change_2w }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+        {% else %}<p class="note">없어요.</p>{% endif %}
+      </div>
+      {% else %}
+      <p class="note" style="grid-column:1/-1">2주 전 데이터가 없어서 아직 비교할 수 없어요.</p>
+      {% endif %}
+    </div>
+
+    <div id="newriser-1m" class="newriser-panel" style="display:none;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px">
+      {% if rank_table.has_1m %}
+      <div class="gp-block">
+        <b>새로 들어온 키워드 (한달 전 대비)</b>
+        {% if rank_table.new_keywords_1m %}
+        <p>{% for c in rank_table.new_keywords_1m %}{{ c.rank }}위 {{ c.keyword }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+        {% else %}<p class="note">없어요.</p>{% endif %}
+      </div>
+      <div class="gp-block">
+        <b>많이 오른 키워드 (한달 전 대비)</b>
+        {% if rank_table.risers_1m %}
+        <p>{% for c in rank_table.risers_1m %}{{ c.keyword }} ▲{{ c.change_1m }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+        {% else %}<p class="note">없어요.</p>{% endif %}
+      </div>
+      {% else %}
+      <p class="note" style="grid-column:1/-1">한달 전 데이터가 없어서 아직 비교할 수 없어요.</p>
+      {% endif %}
     </div>
   </div>
   {% else %}
   <p class="note" style="margin-top:12px">전날 데이터가 아직 없어서 변화는 다음 날부터 보여요.</p>
   {% endif %}
 </div>
+
+<script>
+(function(){
+  var tabs = document.getElementById('newriser-tabs');
+  if (!tabs) return;
+  tabs.querySelectorAll('button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      tabs.querySelectorAll('button').forEach(function(b){ b.classList.remove('is-active'); });
+      btn.classList.add('is-active');
+      ['d', '2w', '1m'].forEach(function(p){
+        var panel = document.getElementById('newriser-' + p);
+        if (panel) panel.style.display = (p === btn.dataset.period) ? 'grid' : 'none';
+      });
+    });
+  });
+})();
+</script>
 {% else %}
 <div class="chart-card" style="margin-bottom:16px">
   <p class="note" style="margin:0">아직 데이터가 없어요.</p>
@@ -193,25 +275,6 @@
 {% endif %}
 
 <div class="gp-forecast-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
-  <div class="chart-card">
-    <div class="chart-card-head"><div><h3>기기별 비중</h3><div class="unit">PC / 모바일 추정 비중</div></div></div>
-    {% if device_chart %}
-    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
-      <div style="width:120px;height:120px;border-radius:50%;background:{{ device_chart.gradient }};flex-shrink:0"></div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        {% for seg in device_chart.segments %}
-        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
-          <span style="width:10px;height:10px;border-radius:50%;background:{{ seg.color }};display:inline-block;flex-shrink:0"></span>
-          <span>{{ seg.label }}</span><b style="margin-left:auto">{{ seg.pct }}%</b>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% else %}
-    <p class="note" style="margin:0">표시할 데이터가 없어요.</p>
-    {% endif %}
-  </div>
-
   <div class="chart-card" style="display:none">
     <div class="chart-card-head"><div><h3>성별 비중</h3><div class="unit">여성 / 남성 추정 비중</div></div></div>
     {% if gender_chart %}
