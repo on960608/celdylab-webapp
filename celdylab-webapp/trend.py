@@ -656,6 +656,24 @@ def api_status():
     return jsonify({"api_enabled": bool(os.environ.get("AUTOMATION_API_KEY"))})
 
 
+@trend_bp.route("/api/groups", methods=["GET"])
+def api_list_groups():
+    """자동 수집(Cowork 예약작업)이 수집한 브랜드/제품명을 어느 "상품군"에 태깅할지
+    판단할 수 있도록, 현재 등록된 상품군 이름과 검색어(terms)를 읽기 전용으로 내려줘요.
+    /api/records용 AUTOMATION_API_KEY와 같은 키를 써요(민감정보가 아니라 읽기 전용이라
+    별도 키를 만들지 않았어요 — 쓰기는 안 되고 상품군 이름만 보여요)."""
+    if not _check_api_key():
+        return jsonify({"ok": False, "error": "인증 실패 (AUTOMATION_API_KEY 미설정 또는 키 불일치)"}), 403
+    groups = db.list_trend_groups()
+    return jsonify({
+        "ok": True,
+        "groups": [
+            {"id": g["id"], "name": g["name"], "terms": [t["term"] for t in g["terms"]]}
+            for g in groups
+        ],
+    })
+
+
 # ---------------------------------------------------------------------------
 # 플랫폼별 인기셀러 자동 수집 API (Cowork 예약작업 전용, 매주 1회)
 #
