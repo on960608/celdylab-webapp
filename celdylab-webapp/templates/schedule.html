@@ -109,7 +109,7 @@
                data-assignees="{{ s.assignees|map(attribute='employee_id')|join(',') }}"
                data-search="{{ (s.title ~ ' ' ~ s.brand ~ ' ' ~ s.product ~ ' ' ~ (s.assignees|map(attribute='name')|join(' ')))|lower }}"
                onclick="schOpenView({{ s.id }})">
-            <b>[{{ s.type }}]</b> {{ s.title }}{% if s.assignees %} · {{ s.assignees[0].name }}{% if s.assignees|length > 1 %}+{{ s.assignees|length - 1 }}{% endif %}{% endif %}
+            <b>[{{ s.type }}]</b> {{ s.title }}
           </div>
           {% endfor %}
         </div>
