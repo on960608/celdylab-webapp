@@ -47,7 +47,17 @@ def _most_frequent(values):
 def index():
     brand = request.args.get("brand") or None
     month = request.args.get("month") or None
-    records = [dict(r) for r in db.list_gongu_records(brand, month)]
+    product = request.args.get("product") or None
+    records = [dict(r) for r in db.list_gongu_records(brand, month, product)]
+    for r in records:
+        r["has_upload"] = db.has_order_upload(r["id"])
+
+    # 목차의 "제품" 드롭다운은 "브랜드" 선택에 따라 바뀐다.
+    # 제품명은 등록할 때 직접 입력하는 자유 텍스트라 자사 제품 카탈로그와 철자가
+    # 다를 수 있어서(예: "변기세정서버" vs "변기수조 세정서버"), 카탈로그가 아니라
+    # 실제로 등록된 공구 기록에 쓰인 제품명 그대로를 목록으로 만든다 (기록을 놓치지 않도록).
+    records_for_brand = [dict(r) for r in db.list_gongu_records(brand, None, None)]
+    filter_products = sorted({r["product"] for r in records_for_brand if r["product"]})
 
     n = len(records)
     total_revenue = sum(r["revenue"] for r in records)
@@ -98,6 +108,8 @@ def index():
         ],
         key=lambda s: -s["total_revenue"],
     )
+    sellers_total_count = len(sellers)
+    sellers = sellers[:5]  # 상위 5명만 보여준다 (매출 높은 순). 특정 제품을 고르면 그 제품 기준 상위 5명.
 
     # 팔로워 구간별 평균
     tier_groups = {}
@@ -175,8 +187,9 @@ def index():
     return render_template(
         "gongu.html",
         brands=BRANDS, months=MONTHS, brand=brand, month=month,
+        product=product, filter_products=filter_products,
         records=records, count=n, avg_revenue=avg_revenue, follower_benchmarks=follower_benchmarks, avg_return=avg_return,
-        sellers=sellers, tiers=tiers, products=products, forecast=forecast,
+        sellers=sellers, sellers_total_count=sellers_total_count, tiers=tiers, products=products, forecast=forecast,
         fc_followers=fc_followers, fc_price=fc_price, fc_follower_options=FC_FOLLOWER_OPTIONS,
         won=won, pct=pct, net_sold=gongu_net_sold, return_pct=gongu_return_pct, manwon=manwon,
     )
@@ -197,9 +210,9 @@ def add():
         "sold_qty": int(f.get("sold_qty") or 0),
         "return_qty": int(f.get("return_qty") or 0),
     }
-    db.create_gongu_record(data, session.get("user_name"))
-    flash("공구 데이터를 등록했어요.")
-    return redirect(url_for("gongu.index", brand=f.get("brand") or None))
+    new_id = db.create_gongu_record(data, session.get("user_name"))
+    flash("공구 데이터를 등록했어요. 주문 엑셀이 있으면 지금 올려서 매출·판매량·반품수량을 자동으로 채울 수 있어요.")
+    return redirect(url_for("gongu.orders_form", record_id=new_id))
 
 
 @gongu_bp.route("/<int:record_id>/edit", methods=["POST"])
@@ -219,7 +232,7 @@ def edit(record_id):
     }
     db.update_gongu_record(record_id, data)
     flash("공구 데이터를 수정했어요.")
-    return redirect(url_for("gongu.index", brand=f.get("brand") or None))
+    return redirect(url_for("gongu.index", brand=f.get("brand") or None, month=request.args.get("month") or None, product=request.args.get("product") or None))
 
 
 @gongu_bp.route("/<int:record_id>/delete", methods=["POST"])
