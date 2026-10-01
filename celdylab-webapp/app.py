@@ -36,7 +36,51 @@ def login_required(view):
 @app.context_processor
 def inject_user():
     name = session.get("user_name")
-    return {"current_user_name": name}
+    role = session.get("user_role") or "팀원"
+    return {"current_user_name": name, "current_user_role": role}
+
+
+# ---------------------------------------------------------------------------
+# 권한 체계 — 관리자 / 팀원 / 타팀
+#   관리자: 전체 화면 수정·삭제 가능
+#   팀원  : 등록·수정은 가능, 삭제는 불가, 계정 관리(직원 계정 추가/삭제/역할변경)도 불가
+#   타팀  : 화면을 보기만 가능 (등록·수정·삭제 전부 불가)
+# 화면마다 버튼을 따로 숨기는 것과 별개로, 여기서 서버 단에서 실제로 막아요 — 화면에서만
+# 숨기면 주소를 직접 입력해서 우회할 수 있어서, 보안상 서버 쪽 확인이 진짜 기준이에요.
+# ---------------------------------------------------------------------------
+
+_NO_ROLE_CHECK_PATHS = {"/login", "/logout"}
+
+
+@app.before_request
+def _enforce_role_permission():
+    path = request.path
+    if path in _NO_ROLE_CHECK_PATHS or path.startswith("/static"):
+        return None
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None  # 조회(보기)는 모든 역할에서 가능
+    if not session.get("user_id"):
+        return None  # 로그인 전이면 각 화면의 로그인 확인 로직이 처리해요
+
+    role = session.get("user_role") or "팀원"
+    if role == "관리자":
+        return None
+
+    is_account_management = path.startswith("/employees")
+    is_delete_like = path.endswith("/delete") or path.endswith("/clear")
+
+    if role == "타팀":
+        flash("타팀 계정은 화면을 보기만 할 수 있어요. 등록·수정·삭제는 관리자나 팀원 계정으로 해주세요.")
+        return redirect(request.referrer or url_for("dashboard.index"))
+
+    # 여기부터는 '팀원'
+    if is_account_management:
+        flash("계정 추가·삭제·역할 변경은 관리자만 할 수 있어요.")
+        return redirect(request.referrer or url_for("dashboard.index"))
+    if is_delete_like:
+        flash("삭제는 관리자만 할 수 있어요. 필요하면 수정으로 값을 바꿔주세요.")
+        return redirect(request.referrer or url_for("dashboard.index"))
+    return None
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -49,6 +93,7 @@ def login():
             session.clear()
             session["user_id"] = emp["id"]
             session["user_name"] = emp["name"]
+            session["user_role"] = emp["role"] if "role" in emp.keys() else "팀원"
             next_url = request.args.get("next") or url_for("dashboard.index")
             return redirect(next_url)
         flash("아이디 또는 비밀번호가 맞지 않아요.")
@@ -120,6 +165,9 @@ def employees():
 def employees_add():
     username = request.form.get("username", "").strip()
     name = request.form.get("name", "").strip()
+    role = request.form.get("role", "팀원").strip() or "팀원"
+    if role not in ("관리자", "팀원", "타팀"):
+        role = "팀원"
     pw1 = request.form.get("password", "")
     pw2 = request.form.get("password_confirm", "")
 
@@ -132,8 +180,23 @@ def employees_add():
     elif len(pw1) < 4:
         flash("비밀번호는 4자 이상으로 입력해 주세요.")
     else:
-        db.create_employee(username, generate_password_hash(pw1), name)
+        db.create_employee(username, generate_password_hash(pw1), name, role)
         flash(f"'{name}'({username}) 계정을 만들었어요.")
+    return redirect(url_for("employees"))
+
+
+@app.route("/employees/<int:emp_id>/role", methods=["POST"])
+@login_required
+def employees_role(emp_id):
+    role = request.form.get("role", "").strip()
+    if role not in ("관리자", "팀원", "타팀"):
+        flash("역할 값이 올바르지 않아요.")
+        return redirect(url_for("employees"))
+    if emp_id == session.get("user_id") and role != "관리자":
+        flash("본인 계정의 관리자 권한은 스스로 내릴 수 없어요. 다른 관리자 계정으로 바꿔주세요.")
+        return redirect(url_for("employees"))
+    db.update_employee_role(emp_id, role)
+    flash("역할을 바꿨어요.")
     return redirect(url_for("employees"))
 
 
