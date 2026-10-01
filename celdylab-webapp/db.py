@@ -38,6 +38,18 @@ def _migrate(conn):
         # 무결성은 애플리케이션 코드(db.py)에서 관리해요.
         conn.execute("ALTER TABLE trend_records ADD COLUMN product_group_id INTEGER")
 
+    emp_cols = {row["name"] for row in conn.execute("PRAGMA table_info(employees)").fetchall()}
+    if "role" not in emp_cols:
+        # 기존 계정은 전부 '팀원'으로 시작하고(가장 안전한 기본값), 아래에서 heehyun 계정만
+        # 관리자로 지정해요. 나머지 계정의 역할은 "직원 계정 관리" 화면에서 희현님이 직접 고르면 돼요.
+        conn.execute("ALTER TABLE employees ADD COLUMN role TEXT NOT NULL DEFAULT '팀원'")
+    # heehyun 계정: 표시 이름을 "온희현"으로, 역할을 "관리자"로 — 본인 확인 요청(2026-10-01).
+    # 아이디(username)나 표시 이름 어느 쪽에 "heehyun"이 들어있든 찾아서 바꿔요(대소문자 구분 없이).
+    conn.execute(
+        "UPDATE employees SET name = '온희현', role = '관리자' "
+        "WHERE lower(username) = 'heehyun' OR lower(name) = 'heehyun'"
+    )
+
     group_cols = {row["name"] for row in conn.execute("PRAGMA table_info(trend_keyword_groups)").fetchall()}
     if "shopping_category" not in group_cols:
         # 네이버 쇼핑인사이트 API 호출에 필요한 카테고리 코드(예: "50000006"). 선택 항목이라 비워둘 수 있어요.
@@ -105,11 +117,11 @@ def get_employee_by_id(emp_id):
     return row
 
 
-def create_employee(username, password_hash, name):
+def create_employee(username, password_hash, name, role="팀원"):
     conn = get_conn()
     conn.execute(
-        "INSERT INTO employees (username, password_hash, name, created_at) VALUES (?, ?, ?, ?)",
-        (username, password_hash, name, now_iso()),
+        "INSERT INTO employees (username, password_hash, name, role, created_at) VALUES (?, ?, ?, ?, ?)",
+        (username, password_hash, name, role, now_iso()),
     )
     conn.commit()
     conn.close()
@@ -117,7 +129,7 @@ def create_employee(username, password_hash, name):
 
 def list_employees():
     conn = get_conn()
-    rows = conn.execute("SELECT id, username, name, created_at FROM employees ORDER BY id").fetchall()
+    rows = conn.execute("SELECT id, username, name, role, created_at FROM employees ORDER BY id").fetchall()
     conn.close()
     return rows
 
@@ -125,6 +137,20 @@ def list_employees():
 def delete_employee(emp_id):
     conn = get_conn()
     conn.execute("DELETE FROM employees WHERE id = ?", (emp_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_employee_role(emp_id, role):
+    conn = get_conn()
+    conn.execute("UPDATE employees SET role = ? WHERE id = ?", (role, emp_id))
+    conn.commit()
+    conn.close()
+
+
+def update_employee_name(emp_id, name):
+    conn = get_conn()
+    conn.execute("UPDATE employees SET name = ? WHERE id = ?", (name, emp_id))
     conn.commit()
     conn.close()
 
@@ -271,7 +297,7 @@ def delete_insight_folder(folder_id):
 
 # ---------- 공구 성과 ----------
 
-def list_gongu_records(brand=None, month=None):
+def list_gongu_records(brand=None, month=None, product=None):
     conn = get_conn()
     q = "SELECT * FROM gongu_records"
     conds, params = [], []
@@ -279,6 +305,8 @@ def list_gongu_records(brand=None, month=None):
         conds.append("brand = ?"); params.append(brand)
     if month:
         conds.append("substr(month, 6, 2) = ?"); params.append(month)
+    if product:
+        conds.append("product = ?"); params.append(product)
     if conds:
         q += " WHERE " + " AND ".join(conds)
     q += " ORDER BY month DESC, id DESC"
@@ -289,14 +317,16 @@ def list_gongu_records(brand=None, month=None):
 
 def create_gongu_record(data, created_by):
     conn = get_conn()
-    conn.execute(
+    cur = conn.execute(
         """INSERT INTO gongu_records
            (month, channel, brand, product, seller, followers, link, revenue, sold_qty, return_qty, created_by, created_at)
            VALUES (:month, :channel, :brand, :product, :seller, :followers, :link, :revenue, :sold_qty, :return_qty, :created_by, :created_at)""",
         {**data, "created_by": created_by, "created_at": now_iso()},
     )
     conn.commit()
+    new_id = cur.lastrowid
     conn.close()
+    return new_id
 
 
 def delete_gongu_record(record_id):
@@ -462,6 +492,18 @@ def record_order_upload(record_id, filename, fingerprint, uploaded_by):
     )
     conn.commit()
     conn.close()
+
+
+def has_order_upload(record_id):
+    """이 공구 기록에 주문 엑셀을 한 번이라도 올린 적 있으면 True.
+    "주문 엑셀 올리기"는 처음 추가했을 때(=아직 한 번도 안 올렸을 때)만 보여주고,
+    그 다음부터는 "수정"으로만 값을 바꾸게 하는 데 쓴다."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT 1 FROM gongu_order_uploads WHERE record_id = ? LIMIT 1", (record_id,)
+    ).fetchone()
+    conn.close()
+    return row is not None
 
 
 # ---------- 옵션 수량 계산기 (작업지시서 01의 3단계) ----------
@@ -1458,12 +1500,18 @@ def add_schedule_comment(schedule_id, employee_id, content):
 
 
 def list_today_tasks(today_str, employee_id=None):
-    """'오늘 해야 할 업무' 위젯용 — 오늘이 마감일인 미완료 체크리스트 항목(담당자 필터 가능)."""
+    """'오늘 해야 할 업무' 위젯용 — 오늘이 마감일인 미완료 체크리스트 항목(담당자 필터 가능).
+
+    체크리스트 항목 자체에 마감일을 따로 입력하지 않은 경우가 많아서(특히 일정 등록할 때
+    자동으로 깔리는 기본 체크리스트는 항목별 마감일이 없어요), 그런 항목은 그 항목이 속한
+    일정(schedules)의 마감일(end_date)이 오늘이면 "오늘 해야 할 업무"로 같이 보여줘요.
+    항목에 마감일을 따로 넣어둔 경우엔 그 날짜를 그대로 따라요."""
     conn = get_conn()
     q = """SELECT t.*, s.title AS schedule_title, s.type AS schedule_type, s.id AS schedule_id
            FROM schedule_tasks t JOIN schedules s ON s.id = t.schedule_id
-           WHERE t.completed = 0 AND t.due_date = ?"""
-    params = [today_str]
+           WHERE t.completed = 0
+             AND (t.due_date = ? OR (t.due_date = '' AND s.end_date = ?))"""
+    params = [today_str, today_str]
     if employee_id:
         q += " AND t.assignee_id = ?"
         params.append(employee_id)
