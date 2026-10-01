@@ -1,9 +1,11 @@
 -- 직원 계정
+-- role: '관리자'(전체 수정/삭제 가능) | '팀원'(수정만 가능, 삭제 불가) | '타팀'(보기만 가능)
 CREATE TABLE IF NOT EXISTS employees (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT '팀원',
   created_at TEXT NOT NULL
 );
 
