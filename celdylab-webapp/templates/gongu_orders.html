@@ -12,7 +12,10 @@
   <div class="chart-card-head"><div><div class="eyebrow" style="margin-bottom:4px">STEP 1</div><h3>파일 선택</h3></div></div>
   <form method="post" action="{{ url_for('gongu.orders_preview', record_id=record.id) }}" enctype="multipart/form-data" class="ins-form-grid" style="margin-top:10px">
     <label class="ins-wide">주문 엑셀 파일 (xlsx, csv)<input type="file" name="order_file" accept=".xlsx,.csv" required></label>
-    <div class="ins-wide" style="display:flex;justify-content:flex-end"><button class="refresh-btn" type="submit">불러오기</button></div>
+    <div class="ins-wide" style="display:flex;justify-content:space-between;align-items:center">
+      <a class="note" href="{{ url_for('gongu.index') }}">엑셀 없이 넘어가기 (목록에서 수정으로 직접 입력)</a>
+      <button class="refresh-btn" type="submit">불러오기</button>
+    </div>
   </form>
 </div>
 
