@@ -1,0 +1,79 @@
+name: naver-rank-daily
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 매일 한국시간 아침 8시
+  workflow_dispatch:
+    inputs:
+      dates:
+        description: '과거 날짜 채우기 (예: 2026-10-01,2026-10-02). 비우면 오늘.'
+        required: false
+        default: ''
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 네이버 쇼핑인사이트 인기검색어 수집 후 새 서버로 보내기
+        env:
+          APP_URL: https://selfdiycontent.pythonanywhere.com
+          RANK_INGEST_KEY: ${{ secrets.RANK_INGEST_KEY }}
+          DATES: ${{ github.event.inputs.dates }}
+        run: |
+          cat > collect_ranks.py <<'PYEOF'
+          import json
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+          from datetime import date, datetime, timedelta, timezone
+
+          sys.path.insert(0, "celdylab-webapp")
+          import naver_rank  # noqa: E402
+
+          KST = timezone(timedelta(hours=9))
+          APP_URL = os.environ["APP_URL"].rstrip("/")
+          KEY = os.environ["RANK_INGEST_KEY"]
+          raw = os.environ.get("DATES", "").strip()
+          dates = [d.strip() for d in raw.split(",") if d.strip()] or [datetime.now(KST).date().isoformat()]
+
+          failed = 0
+          for d in dates:
+              day = date.fromisoformat(d)
+              items = []
+              for name, cid in naver_rank.CATEGORIES.items():
+                  try:
+                      res = naver_rank.fetch_top100(cid, end=day - timedelta(days=2))
+                      items.append({"cid": cid, "gender": "", "ages": [], "range": res["range"], "ranks": res["ranks"]})
+                      print("OK  ", d, name, len(res["ranks"]), flush=True)
+                  except Exception as e:
+                      failed += 1
+                      print("FAIL", d, name, str(e)[:200], flush=True)
+                  time.sleep(1)
+              if not items:
+                  continue
+              req = urllib.request.Request(
+                  APP_URL + "/trend/api/ingest-ranks",
+                  data=json.dumps({"collected_date": d, "items": items}).encode("utf-8"),
+                  headers={"Authorization": "Bearer " + KEY, "Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      print("SAVED", d, r.status, r.read().decode("utf-8")[:200], flush=True)
+              except urllib.error.HTTPError as e:
+                  failed += 1
+                  print("SAVE FAIL", d, e.code, e.read().decode("utf-8")[:200], flush=True)
+              except Exception as e:
+                  failed += 1
+                  print("SAVE FAIL", d, str(e)[:200], flush=True)
+
+          sys.exit(1 if failed else 0)
+          PYEOF
+          python collect_ranks.py
