@@ -14,8 +14,9 @@
   <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
       <div class="tab-toggle" id="schTypeToggle">
-        <button type="button" class="is-active" data-type="시딩" onclick="schToggleType(this,'시딩')">시딩</button>
-        <button type="button" class="is-active" data-type="공구" onclick="schToggleType(this,'공구')">공구</button>
+        {% for t in types %}
+        <button type="button" class="is-active" data-type="{{ t }}" onclick="schToggleType(this,'{{ t }}')">{{ t }}</button>
+        {% endfor %}
       </div>
       <details class="sch-assignee-dd">
         <summary class="refresh-btn" style="cursor:pointer">담당자 <span id="schAssigneeSummary">전체</span> ▾</summary>
@@ -58,10 +59,17 @@
       <div class="chart-card-head" style="margin-bottom:8px"><h3>오늘 해야 할 업무 <span style="color:var(--accent-deep)">{{ today_count }}</span></h3></div>
       <div id="schTodayList" class="sch-today-list">
         {% for t in today_tasks %}
+        {% if t['kind'] == 'schedule' %}
+        <label class="sch-today-item" data-task-row="sch-{{ t['schedule_id'] }}">
+          <input type="checkbox" onchange="schToggleTodayScheduleGroup({{ t['schedule_id'] }}, this)">
+          <span><b>[{{ t['schedule_type'] }}]</b> {{ t['schedule_title'] }}</span>
+        </label>
+        {% else %}
         <label class="sch-today-item" data-task-row="{{ t['id'] }}">
           <input type="checkbox" onchange="schToggleTodayTask({{ t['id'] }}, this)">
           <span><b>[{{ t['schedule_type'] }}]</b> {{ t['schedule_title'] }} · {{ t['title'] }}</span>
         </label>
+        {% endif %}
         {% else %}
         <p class="note" style="margin:0">오늘 마감인 업무가 없어요.</p>
         {% endfor %}
@@ -101,7 +109,7 @@
           {% endfor %}
           {% for seg in week.segments %}
           {% set s = seg.schedule %}
-          {% set c = type_colors[s.type] %}
+          {% set c = urgent_color if s.priority == '긴급' else type_colors[s.type] %}
           <div class="sch-bar {{ 'cont-left' if seg.continues_left else '' }} {{ 'cont-right' if seg.continues_right else '' }}"
                style="grid-column:{{ seg.col_start + 1 }} / span {{ seg.span }};grid-row:{{ seg.lane + 2 }};background:{{ c.bg }};border-color:{{ c.border }};color:{{ c.text }}"
                data-schedule-id="{{ s.id }}"
@@ -256,6 +264,7 @@
 <script>
 const SCH_EMPLOYEES = {{ (employees | map(attribute='id') | list) | tojson }};
 const SCH_TYPE_COLORS = {{ type_colors_json | safe }};
+const SCH_URGENT_COLOR = {{ urgent_color_json | safe }};
 let schCurrentSchedule = null;
 
 function schApplyFilters() {
@@ -295,6 +304,15 @@ function schToggleTodayTask(taskId, checkbox) {
   fetch('{{ url_for("schedule.tasks_toggle", task_id=0) }}'.replace('/0/', '/' + taskId + '/'), { method: 'POST' })
     .then(r => r.json()).then(() => {
       const row = document.querySelector('[data-task-row="' + taskId + '"]');
+      if (row) { row.style.opacity = '0.4'; setTimeout(() => row.remove(), 300); }
+    });
+}
+
+function schToggleTodayScheduleGroup(scheduleId, checkbox) {
+  checkbox.disabled = true;
+  fetch('{{ url_for("schedule.tasks_complete_default_today", schedule_id=0) }}'.replace('/0/', '/' + scheduleId + '/'), { method: 'POST' })
+    .then(r => r.json()).then(() => {
+      const row = document.querySelector('[data-task-row="sch-' + scheduleId + '"]');
       if (row) { row.style.opacity = '0.4'; setTimeout(() => row.remove(), 300); }
     });
 }
@@ -380,6 +398,9 @@ function schEsc(s) { const d = document.createElement('div'); d.textContent = s 
 function schRenderView() {
   const s = schCurrentSchedule;
   const c = SCH_TYPE_COLORS[s.type] || {bg:'#eee', text:'#333'};
+  const priorityBadgeStyle = s.priority === '긴급'
+    ? 'background:' + SCH_URGENT_COLOR.bg + ';color:' + SCH_URGENT_COLOR.text
+    : 'background:var(--panel-soft);color:var(--muted)';
   const dateLine = s.start_date === s.end_date
     ? s.start_date
     : (s.start_date + ' ~ ' + s.end_date);
@@ -403,7 +424,7 @@ function schRenderView() {
     <div class="sch-view-badges">
       <span class="sch-view-badge" style="background:${c.bg};color:${c.text}">${schEsc(s.type)}</span>
       <span class="sch-view-badge" style="background:var(--accent-soft);color:var(--accent-deep)">${schEsc(s.status)}</span>
-      <span class="sch-view-badge" style="background:var(--panel-soft);color:var(--muted)">중요도 · ${schEsc(s.priority)}</span>
+      <span class="sch-view-badge" style="${priorityBadgeStyle}">중요도 · ${schEsc(s.priority)}</span>
     </div>
     <div><b>${schEsc(s.brand)}${s.brand && s.product ? ' · ' : ''}${schEsc(s.product)}</b></div>
     <div class="note" style="margin:0">${dateLine}${timeLine}</div>
