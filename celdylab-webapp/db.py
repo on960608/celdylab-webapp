@@ -1499,23 +1499,70 @@ def add_schedule_comment(schedule_id, employee_id, content):
     conn.close()
 
 
+
 def list_today_tasks(today_str, employee_id=None):
     """'오늘 해야 할 업무' 위젯용 — 오늘이 마감일인 미완료 체크리스트 항목(담당자 필터 가능).
 
-    체크리스트 항목 자체에 마감일을 따로 입력하지 않은 경우가 많아서(특히 일정 등록할 때
-    자동으로 깔리는 기본 체크리스트는 항목별 마감일이 없어요), 그런 항목은 그 항목이 속한
-    일정(schedules)의 마감일(end_date)이 오늘이면 "오늘 해야 할 업무"로 같이 보여줘요.
-    항목에 마감일을 따로 넣어둔 경우엔 그 날짜를 그대로 따라요."""
+    체크리스트 항목에 마감일을 직접 넣어둔 경우(kind='task')는 그 항목 하나하나를 그대로
+    보여줘요 — 진짜 개별 할 일이니까요.
+
+    반면 일정 등록 시 자동으로 깔리는 기본 체크리스트(인플루언서 리스트 확정, 컨택 완료 ...)는
+    항목별 마감일이 없어서, 예전엔 그 일정의 마감일(end_date)이 오늘이면 항목을 전부 따로
+    보여줬어요 — 체크리스트가 10개면 10줄이 다 뜨는 문제가 있었어요(2026-10-01, 희현님 확인).
+    지금은 그런 항목들은 일정별로 묶어서(kind='schedule') "일정표에 보이는 모습 그대로" 한
+    줄만 보여줘요. 체크하면 그 일정의 마감일-없는 기본 체크리스트 항목이 한 번에 완료돼요."""
     conn = get_conn()
-    q = """SELECT t.*, s.title AS schedule_title, s.type AS schedule_type, s.id AS schedule_id
-           FROM schedule_tasks t JOIN schedules s ON s.id = t.schedule_id
-           WHERE t.completed = 0
-             AND (t.due_date = ? OR (t.due_date = '' AND s.end_date = ?))"""
-    params = [today_str, today_str]
+
+    q_items = """SELECT t.id, t.title, t.schedule_id, s.title AS schedule_title,
+                        s.type AS schedule_type, s.priority AS priority
+                 FROM schedule_tasks t JOIN schedules s ON s.id = t.schedule_id
+                 WHERE t.completed = 0 AND t.due_date = ?"""
+    params_items = [today_str]
     if employee_id:
-        q += " AND t.assignee_id = ?"
-        params.append(employee_id)
-    q += " ORDER BY s.priority = '긴급' DESC, s.priority = '중요' DESC, t.id"
-    rows = conn.execute(q, params).fetchall()
+        q_items += " AND t.assignee_id = ?"
+        params_items.append(employee_id)
+    item_rows = conn.execute(q_items, params_items).fetchall()
+    items = [
+        {
+            "kind": "task", "id": r["id"], "title": r["title"], "schedule_id": r["schedule_id"],
+            "schedule_title": r["schedule_title"], "schedule_type": r["schedule_type"], "priority": r["priority"],
+        }
+        for r in item_rows
+    ]
+
+    q_groups = """SELECT DISTINCT s.id, s.title, s.type, s.priority
+                  FROM schedules s JOIN schedule_tasks t ON t.schedule_id = s.id
+                  WHERE s.end_date = ? AND t.completed = 0 AND t.due_date = ''"""
+    params_groups = [today_str]
+    if employee_id:
+        q_groups += """ AND EXISTS (
+                            SELECT 1 FROM schedule_assignees sa
+                            WHERE sa.schedule_id = s.id AND sa.employee_id = ? AND sa.role = 'assignee'
+                        )"""
+        params_groups.append(employee_id)
+    group_rows = conn.execute(q_groups, params_groups).fetchall()
+    groups = [
+        {
+            "kind": "schedule", "schedule_id": r["id"], "schedule_title": r["title"],
+            "schedule_type": r["type"], "priority": r["priority"],
+        }
+        for r in group_rows
+    ]
+
     conn.close()
-    return [dict(r) for r in rows]
+    priority_rank = {"긴급": 0, "중요": 1, "일반": 2}
+    all_rows = items + groups
+    all_rows.sort(key=lambda r: priority_rank.get(r.get("priority"), 2))
+    return all_rows
+
+
+def complete_default_today_tasks(schedule_id):
+    """'오늘 해야 할 업무'에서 일정 하나로 묶여 보이는, 마감일 없는 기본 체크리스트 항목들을
+    한 번에 완료 처리해요(list_today_tasks의 kind='schedule' 줄 체크 시 호출)."""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE schedule_tasks SET completed = 1 WHERE schedule_id = ? AND due_date = '' AND completed = 0",
+        (schedule_id,),
+    )
+    conn.commit()
+    conn.close()
