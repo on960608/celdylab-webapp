@@ -20,14 +20,21 @@ import db
 
 schedule_bp = Blueprint("schedule", __name__, url_prefix="/schedule")
 
-TYPES = ["시딩", "공구"]
+TYPES = ["시딩", "공구", "공통", "정산"]
 TYPE_COLORS = {"시딩": {"bg": "#eaf1ff", "border": "#8fb4f5", "text": "#2f5fb8", "dot": "#3f7ce0"},
-               "공구": {"bg": "#e8f7ee", "border": "#8fd3ab", "text": "#1f8a4c", "dot": "#2aa860"}}
+               "공구": {"bg": "#e8f7ee", "border": "#8fd3ab", "text": "#1f8a4c", "dot": "#2aa860"},
+               "공통": {"bg": "#f2eefc", "border": "#b7a3e8", "text": "#6a46c4", "dot": "#8a63e0"},
+               "정산": {"bg": "#fff2e3", "border": "#e6b579", "text": "#a8650f", "dot": "#e0932f"}}
 STATUSES = ["예정", "진행중", "확인 필요", "완료"]
 PRIORITIES = ["일반", "중요", "긴급"]
+# 2026-10-01: 일정표에서 중요도가 "긴급"인 일정은 유형 색과 상관없이 빨간색으로 눈에 띄게
+# 표시해요(희현님 확인). type_colors와는 별개로 priority 전용 색을 하나만 둬요.
+URGENT_COLOR = {"bg": "#fdeaea", "border": "#e2847a", "text": "#b7291a", "dot": "#d9453f"}
 
 # 12번 문단 — 일정 등록 시 유형에 맞춰 자동으로 깔아주는 기본 체크리스트예요.
 # (나중에 "템플릿으로 저장" 기능을 붙일 때 이 상수를 별도 테이블로 옮기기 쉽게 구조를 단순하게 유지)
+# 2026-10-01: "공통"은 미리 깔리는 체크리스트 없이 필요할 때마다 직접 업무를 추가하는 용도라
+# 빈 목록으로 둬요. "정산"은 비용지급 확인 → 엑셀 기입 → 지결 올리기 3단계만 깔려요(희현님 확인).
 DEFAULT_CHECKLISTS = {
     "시딩": [
         "인플루언서 리스트 확정", "컨택 완료", "주소 취합", "제품 출고", "송장 전달",
@@ -37,6 +44,8 @@ DEFAULT_CHECKLISTS = {
         "인플루언서 확정", "공구 조건 협의", "샘플 발송", "공구 가이드 전달", "콘텐츠 일정 확인",
         "공구 페이지 준비", "사전 홍보", "공구 오픈", "진행 모니터링", "공구 종료", "결과 정리",
     ],
+    "공통": [],
+    "정산": ["비용지급 확인", "엑셀 기입", "지결올리기"],
 }
 
 WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"]
@@ -198,6 +207,7 @@ def index():
         weekday_labels=WEEKDAY_LABELS,
         types=TYPES, statuses=STATUSES, priorities=PRIORITIES,
         type_colors=TYPE_COLORS, type_colors_json=json.dumps(TYPE_COLORS, ensure_ascii=False),
+        urgent_color=URGENT_COLOR, urgent_color_json=json.dumps(URGENT_COLOR, ensure_ascii=False),
         employees=employees, groups=groups,
         schedules_json=json.dumps(schedules_json, ensure_ascii=False),
         today_tasks=today_tasks, today_iso=today.isoformat(),
@@ -284,6 +294,14 @@ def tasks_toggle(task_id):
 @schedule_bp.route("/tasks/<int:task_id>/delete", methods=["POST"])
 def tasks_delete(task_id):
     db.delete_schedule_task(task_id)
+    return jsonify({"ok": True})
+
+
+@schedule_bp.route("/<int:schedule_id>/tasks/complete-default-today", methods=["POST"])
+def tasks_complete_default_today(schedule_id):
+    """'오늘 해야 할 업무'에서 일정 하나로 묶여 보이는 기본 체크리스트(마감일 없음) 항목들을
+    한 번에 완료 처리해요 (db.list_today_tasks의 kind='schedule' 줄용)."""
+    db.complete_default_today_tasks(schedule_id)
     return jsonify({"ok": True})
 
 
