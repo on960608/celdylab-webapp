@@ -49,6 +49,7 @@ jobs:
               (re.compile(r"^오늘\s*오픈"), "오픈예정"),
               (re.compile(r"^\d{1,2}/\d{1,2}\s*마감"), "종료"),
           ]
+          _COMBINED_RE = re.compile(r"^(\d{1,2})[\s.]+(?![▲▼△▽↑↓\-–—−])(\D.*?)(?:\s+([▲▼△▽↑↓]\s*\d+|[\-–—−]|NEW|new))?$")
           _DELTA_RE = re.compile(r"^([▲▼△▽↑↓]\s*\d+|[-–—−]|NEW|new)$")
 
 
@@ -121,6 +122,13 @@ jobs:
                       mode = "kw"
                   elif "이번 주 인기 공구" in l:
                       mode = "weekly"
+                  elif mode in ("kw", "weekly") and _COMBINED_RE.match(l):
+                      m = _COMBINED_RE.match(l)
+                      rank, title, delta = int(m.group(1)), m.group(2).strip(), (m.group(3) or "")
+                      if mode == "kw" and len(kws) < 30:
+                          kws.append({"rank": rank, "keyword": title, "delta": delta})
+                      elif mode == "weekly" and len(weekly) < 10:
+                          weekly.append({"rank": rank, "title": title})
                   elif mode in ("kw", "weekly") and re.fullmatch(r"\d{1,2}", l) and i + 1 < len(lines):
                       title = lines[i + 1]
                       if not re.fullmatch(r"\d{1,2}", title) and not _DELTA_RE.match(title):
@@ -159,26 +167,34 @@ jobs:
                   browser = p.chromium.launch()
                   page = browser.new_page(viewport={"width": 1280, "height": 2000}, locale="ko-KR")
 
-                  def read(url):
-                      page.goto(url, wait_until="networkidle", timeout=60000)
+                  def read(url, expect):
+                      page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                      try:
+                          page.wait_for_selector("text=" + expect, timeout=30000)
+                      except Exception:  # noqa: BLE001
+                          time.sleep(5)
                       for _ in range(3):
                           page.mouse.wheel(0, 3000)
                           time.sleep(1)
                       return page.inner_text("body")
 
                   try:
-                      kws, weekly = parse_home_text(read(HOME))
+                      home_text = read(HOME, "지금 뜨는 검색어")
+                      kws, weekly = parse_home_text(home_text)
                   except Exception as e:  # noqa: BLE001
-                      kws = []
+                      kws, home_text = [], ""
                       errors.append("첫 화면 읽기 실패: " + str(e)[:150])
                   if not kws:
                       errors.append("지금 뜨는 검색어를 찾지 못했어요(화면 구조가 바뀌었을 수 있어요).")
+                      errors.append("화면 글자 앞부분: " + " / ".join(home_text.split())[:600])
                   for kw in kws:
                       try:
-                          text = read(HOME + "search?q=" + urllib.parse.quote(kw["keyword"]))
+                          text = read(HOME + "search?q=" + urllib.parse.quote(kw["keyword"]), "팔로워")
                           res = parse_search_text(text)
                           if not res:
                               errors.append(f"'{kw['keyword']}' 검색 결과에서 인플루언서를 읽지 못했어요.")
+                              if not any("검색 화면 글자" in e for e in errors):
+                                  errors.append("검색 화면 글자 앞부분: " + " / ".join(text.split())[:600])
                           kw["results"] = res
                           print("OK", kw["rank"], kw["keyword"], len(res), flush=True)
                       except Exception as e:  # noqa: BLE001
