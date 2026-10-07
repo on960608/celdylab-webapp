@@ -1,0 +1,208 @@
+name: daily-candidates
+
+on:
+  schedule:
+    - cron: '37 22 * * *'   # 매일 한국시간 아침 7시 37분
+    - cron: '57 23 * * *'   # 혹시 빠졌을 때를 위한 백업 (한국시간 8시 57분)
+  workflow_dispatch:
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 브라우저 준비
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: 지금하는공구 인기검색어와 인플루언서 수집 후 새 서버로 보내기
+        env:
+          APP_URL: https://selfdiycontent.pythonanywhere.com
+          RANK_INGEST_KEY: ${{ secrets.RANK_INGEST_KEY }}
+        run: |
+          cat > collect_candidates.py <<'PYEOF'
+          """지금하는공구(09now.com)에서 '지금 뜨는 검색어'와 검색어별 공구 진행 인플루언서를 모아 새 서버로 보낸다."""
+          import json
+          import os
+          import re
+          import sys
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timedelta, timezone
+
+          HOME = "https://www.09now.com/"
+          TOP_N = 10
+
+          _ID_RE = re.compile(r"^@?[A-Za-z0-9._]{2,40}$")
+          _FOLLOWER_RE = re.compile(r"^([\d.,]+)\s*(만|천)?\s*팔로워$")
+          _INLINE_RE = re.compile(r"^@?([A-Za-z0-9._]{2,40})\s+([\d.,]+)\s*(만|천)?\s*팔로워$")
+          _STATUS_RES = [
+              (re.compile(r"^(\d+)\s*일차"), "진행중"),
+              (re.compile(r"^마감\s*(\d+)\s*일\s*전"), "마감임박"),
+              (re.compile(r"^오늘\s*마감"), "마감임박"),
+              (re.compile(r"^오픈\s*(\d+)\s*일\s*전"), "오픈예정"),
+              (re.compile(r"^오늘\s*오픈"), "오픈예정"),
+              (re.compile(r"^\d{1,2}/\d{1,2}\s*마감"), "종료"),
+          ]
+          _DELTA_RE = re.compile(r"^([▲▼△▽↑↓]\s*\d+|[-–—−]|NEW|new)$")
+
+
+          def _followers(num, unit):
+              try:
+                  v = float(num.replace(",", ""))
+              except ValueError:
+                  return 0
+              return int(round(v * (10000 if unit == "만" else 1000 if unit == "천" else 1)))
+
+
+          def _status(line):
+              """줄 맨 앞이 상태 표시면 (상태, 원문, 나머지 글자)를 돌려준다."""
+              for rx, name in _STATUS_RES:
+                  m = rx.match(line)
+                  if m:
+                      raw = m.group(0).strip()
+                      return name, raw, line[m.end():].strip()
+              return None
+
+
+          def parse_search_text(text):
+              """검색 결과 화면 글자에서 인플루언서 목록을 뽑는다. 모르는 모양은 건너뛴다."""
+              lines = [l.strip() for l in text.splitlines() if l.strip()]
+              results, seen = [], set()
+              for i, line in enumerate(lines):
+                  handle, fnum, funit, name_line = None, None, None, None
+                  m = _INLINE_RE.match(line)
+                  if m:
+                      handle, fnum, funit = m.group(1), m.group(2), m.group(3)
+                  else:
+                      m = _FOLLOWER_RE.match(line)
+                      if not m or i == 0:
+                          continue
+                      fnum, funit = m.group(1), m.group(2)
+                      prev = lines[i - 1]
+                      if _ID_RE.match(prev):
+                          handle = prev.lstrip("@")
+                      elif i >= 2 and _ID_RE.match(lines[i - 2]) and lines[i - 2].startswith("@"):
+                          handle, name_line = lines[i - 2].lstrip("@"), prev  # 맨 위 대표 노출 카드
+                  if not handle:
+                      continue
+                  status, raw, title = None, "", ""
+                  nxt = lines[i + 1] if i + 1 < len(lines) else ""
+                  st = _status(nxt)
+                  if st:
+                      status, raw, rest = st
+                      title = rest or (lines[i + 2] if i + 2 < len(lines) else "")
+                  elif name_line is not None:
+                      status, raw, title = "대표노출", "대표 노출", nxt
+                  else:
+                      continue
+                  key = (handle, title)
+                  if key in seen:
+                      continue
+                  seen.add(key)
+                  results.append({"handle": handle, "followers": _followers(fnum, funit), "status": status,
+                                  "status_raw": raw, "title": title[:120]})
+              return results
+
+
+          def parse_home_text(text):
+              """첫 화면 글자에서 '지금 뜨는 검색어'와 '이번 주 인기 공구'를 뽑는다."""
+              lines = [l.strip() for l in text.splitlines() if l.strip()]
+              kws, weekly, mode = [], [], None
+              i = 0
+              while i < len(lines):
+                  l = lines[i]
+                  if "지금 뜨는 검색어" in l:
+                      mode = "kw"
+                  elif "이번 주 인기 공구" in l:
+                      mode = "weekly"
+                  elif mode in ("kw", "weekly") and re.fullmatch(r"\d{1,2}", l) and i + 1 < len(lines):
+                      title = lines[i + 1]
+                      if not re.fullmatch(r"\d{1,2}", title) and not _DELTA_RE.match(title):
+                          delta = ""
+                          if mode == "kw" and i + 2 < len(lines) and _DELTA_RE.match(lines[i + 2]):
+                              delta = lines[i + 2]
+                              i += 1
+                          rank = int(l)
+                          if mode == "kw" and len(kws) < 30:
+                              kws.append({"rank": rank, "keyword": title, "delta": delta})
+                          elif mode == "weekly" and len(weekly) < 10:
+                              weekly.append({"rank": rank, "title": title})
+                          i += 1
+                  i += 1
+              return kws[:TOP_N], weekly
+
+
+          def _post(app_url, key, payload):
+              req = urllib.request.Request(
+                  app_url.rstrip("/") + "/trend/api/ingest-candidates",
+                  data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                  headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"}, method="POST")
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  return r.status, r.read().decode("utf-8")[:200]
+
+
+          def main():
+              from playwright.sync_api import sync_playwright
+
+              kst = timezone(timedelta(hours=9))
+              today = datetime.now(kst).date().isoformat()
+              app_url, key = os.environ["APP_URL"], os.environ["RANK_INGEST_KEY"]
+              errors, keywords, weekly = [], [], []
+
+              with sync_playwright() as p:
+                  browser = p.chromium.launch()
+                  page = browser.new_page(viewport={"width": 1280, "height": 2000}, locale="ko-KR")
+
+                  def read(url):
+                      page.goto(url, wait_until="networkidle", timeout=60000)
+                      for _ in range(3):
+                          page.mouse.wheel(0, 3000)
+                          time.sleep(1)
+                      return page.inner_text("body")
+
+                  try:
+                      kws, weekly = parse_home_text(read(HOME))
+                  except Exception as e:  # noqa: BLE001
+                      kws = []
+                      errors.append("첫 화면 읽기 실패: " + str(e)[:150])
+                  if not kws:
+                      errors.append("지금 뜨는 검색어를 찾지 못했어요(화면 구조가 바뀌었을 수 있어요).")
+                  for kw in kws:
+                      try:
+                          text = read(HOME + "search?q=" + urllib.parse.quote(kw["keyword"]))
+                          res = parse_search_text(text)
+                          if not res:
+                              errors.append(f"'{kw['keyword']}' 검색 결과에서 인플루언서를 읽지 못했어요.")
+                          kw["results"] = res
+                          print("OK", kw["rank"], kw["keyword"], len(res), flush=True)
+                      except Exception as e:  # noqa: BLE001
+                          kw["results"] = []
+                          errors.append(f"'{kw['keyword']}' 검색 실패: " + str(e)[:150])
+                      keywords.append(kw)
+                      time.sleep(2)
+                  browser.close()
+
+              payload = {"collected_date": today, "keywords": keywords, "weekly_popular": weekly, "errors": errors}
+              if not keywords:
+                  payload["keywords"] = []
+              try:
+                  print("SAVED", *_post(app_url, key, payload), flush=True)
+              except urllib.error.HTTPError as e:
+                  print("SAVE FAIL", e.code, e.read().decode("utf-8")[:200], flush=True)
+                  sys.exit(1)
+              except Exception as e:  # noqa: BLE001
+                  print("SAVE FAIL", str(e)[:200], flush=True)
+                  sys.exit(1)
+              sys.exit(1 if not keywords else 0)
+
+
+          if __name__ == "__main__":
+              main()
+          PYEOF
+          python collect_candidates.py
