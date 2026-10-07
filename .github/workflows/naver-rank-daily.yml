@@ -2,7 +2,9 @@ name: naver-rank-daily
 
 on:
   schedule:
-    - cron: '0 23 * * *'   # 매일 한국시간 아침 8시
+   - cron: '17 22 * * *'
+   - cron: '47 23 * * *'
+    
   workflow_dispatch:
     inputs:
       dates:
